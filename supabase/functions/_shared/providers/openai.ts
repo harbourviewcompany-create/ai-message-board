@@ -1,39 +1,55 @@
 import { buildPrompt } from './prompt.ts'
 import { extractJson } from './normalize.ts'
-import type { ProviderAdapter, ProviderInput, ProviderResult } from './types.ts'
+import { contributionSchema } from './schema.ts'
+import { fetchWithRetry } from './http.ts'
+import type { AdapterOptions, ProviderAdapter, ProviderInput, ProviderResult } from './types.ts'
 
-export function openAIAdapter(): ProviderAdapter {
+export function openAIAdapter(options: AdapterOptions): ProviderAdapter {
   const apiKey = Deno.env.get('OPENAI_API_KEY') ?? ''
-  const model = Deno.env.get('OPENAI_MODEL') ?? 'gpt-6-astra'
 
   return {
     name: 'openai',
-    model,
+    model: options.model,
     configured: Boolean(apiKey),
     async run(input: ProviderInput): Promise<ProviderResult> {
-      const response = await fetch('https://api.openai.com/v1/responses', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
+      const response = await fetchWithRetry(
+        'https://api.openai.com/v1/responses',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: options.model,
+            store: false,
+            instructions: 'Follow the Council protocol. Produce only the structured contribution.',
+            input: buildPrompt(input),
+            reasoning: { effort: options.effort },
+            text: {
+              format: {
+                type: 'json_schema',
+                name: 'council_contribution',
+                strict: true,
+                schema: contributionSchema,
+              },
+            },
+          }),
         },
-        body: JSON.stringify({
-          model,
-          instructions: 'Follow the Council protocol exactly. Return JSON only.',
-          input: buildPrompt(input),
-          reasoning: { effort: input.phase === 'synthesis' ? 'high' : 'medium' },
-        }),
-        signal: AbortSignal.timeout(45_000),
-      })
+        options.timeoutMs,
+        options.maxRetries,
+      )
 
       if (!response.ok) throw new Error(`OpenAI ${response.status}: ${await response.text()}`)
       const body = await response.json()
-      const text = body.output_text ?? body.output?.flatMap((item: any) => item.content ?? []).find((c: any) => c.type === 'output_text')?.text
+      const text = body.output_text ??
+        body.output?.flatMap((item: any) => item.content ?? [])
+          .find((c: any) => c.type === 'output_text')?.text
       if (!text) throw new Error('OpenAI response contained no output text')
 
       return {
         provider: 'openai',
-        model,
+        model: options.model,
         normalized: extractJson(text),
         usage: body.usage ?? {},
       }
