@@ -1,0 +1,36 @@
+import { buildOpenAIRequest } from '../supabase/functions/_shared/providers/openai.ts'
+import { buildAnthropicRequest } from '../supabase/functions/_shared/providers/anthropic.ts'
+import { buildXAIRequest } from '../supabase/functions/_shared/providers/xai.ts'
+import type { AdapterOptions, ProviderInput } from '../supabase/functions/_shared/providers/types.ts'
+
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) throw new Error(message)
+}
+
+const options: AdapterOptions = { model: 'test-model', timeoutMs: 10000, maxRetries: 0, effort: 'medium' }
+const input: ProviderInput = {
+  threadId: 'thread-1', runId: 'run-1', phase: 'proposal', strategy: 'balanced',
+  title: 'Test', objective: 'Choose the safest option', existing: [], githubContext: [],
+}
+
+Deno.test('OpenAI request uses reasoning and strict structured output', () => {
+  const body: any = buildOpenAIRequest(options, input)
+  assert(body.reasoning?.effort === 'medium', 'OpenAI reasoning effort missing')
+  assert(body.text?.format?.type === 'json_schema', 'OpenAI JSON schema format missing')
+  assert(body.text?.format?.strict === true, 'OpenAI structured output must be strict')
+})
+
+Deno.test('Anthropic request uses output_config effort and JSON schema format', () => {
+  const body: any = buildAnthropicRequest(options, input)
+  assert(body.output_config?.effort === 'medium', 'Anthropic effort missing')
+  assert(body.output_config?.format?.type === 'json_schema', 'Anthropic structured output missing')
+  assert(body.output_config?.format?.schema?.required?.includes('summary'), 'Anthropic schema missing summary')
+})
+
+Deno.test('xAI Responses request uses reasoning envelope, cache key and structured output', () => {
+  const body: any = buildXAIRequest(options, input)
+  assert(body.reasoning?.effort === 'medium', 'xAI reasoning envelope missing')
+  assert(!('reasoning_effort' in body), 'Legacy xAI reasoning_effort field must not be used')
+  assert(body.prompt_cache_key === 'council:thread-1', 'xAI prompt cache key missing')
+  assert(body.text?.format?.type === 'json_schema', 'xAI JSON schema format missing')
+})
