@@ -164,9 +164,9 @@ Deno.serve(async (req) => {
     return json({
       ok: true,
       providers: {
-        openai: { configured: Boolean(Deno.env.get('OPENAI_API_KEY')), default_model: Deno.env.get('OPENAI_MODEL') ?? 'gpt-6.1-sol' },
-        anthropic: { configured: Boolean(Deno.env.get('ANTHROPIC_API_KEY')), default_model: Deno.env.get('ANTHROPIC_MODEL') ?? 'claude-sonnet-5' },
-        xai: { configured: Boolean(Deno.env.get('XAI_API_KEY')), default_model: Deno.env.get('XAI_MODEL') ?? 'grok-4.7' },
+        openai: { configured: Boolean(Deno.env.get('OPENAI_API_KEY')), default_model: 'gpt-6.1-sol' },
+        anthropic: { configured: Boolean(Deno.env.get('ANTHROPIC_API_KEY')), default_model: 'claude-sonnet-5-5' },
+        xai: { configured: Boolean(Deno.env.get('XAI_API_KEY')), default_model: 'grok-4.7' },
       },
       github_webhook: { configured: Boolean(Deno.env.get('GITHUB_WEBHOOK_SECRET')) },
     })
