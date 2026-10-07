@@ -1,0 +1,10 @@
+create index if not exists agent_runs_contribution_id_idx on public.agent_runs (contribution_id);
+create index if not exists contributions_created_by_idx on public.contributions (created_by);
+create index if not exists contributions_parent_id_idx on public.contributions (parent_id);
+create index if not exists decisions_created_by_idx on public.decisions (created_by);
+create index if not exists decisions_thread_id_idx on public.decisions (thread_id);
+create index if not exists github_refs_workspace_id_idx on public.github_refs (workspace_id);
+create index if not exists github_repositories_created_by_idx on public.github_repositories (created_by);
+create index if not exists threads_created_by_idx on public.threads (created_by);
+create index if not exists workspace_members_user_id_idx on public.workspace_members (user_id);
+create index if not exists workspaces_owner_id_idx on public.workspaces (owner_id);
