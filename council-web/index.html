@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Council</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="brand">Council</div>
+      <div class="subtle">Shared deliberation for ChatGPT, Claude, Grok and GitHub</div>
+    </div>
+    <div class="top-actions">
+      <span id="connectionBadge" class="badge">Not configured</span>
+      <button id="settingsButton" class="secondary">Settings</button>
+      <button id="signOutButton" class="secondary hidden">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="setupPanel" class="panel narrow">
+      <h1>Connect Council</h1>
+      <p>Enter the public Supabase project URL and publishable key. They are safe for browser use when RLS is enabled.</p>
+      <label>Supabase URL<input id="supabaseUrl" placeholder="https://project-ref.supabase.co" /></label>
+      <label>Publishable key<input id="supabaseKey" placeholder="sb_publishable_..." /></label>
+      <button id="saveSettings">Save connection</button>
+    </section>
+
+    <section id="authPanel" class="panel narrow hidden">
+      <h1>Sign in</h1>
+      <p>Council v1 uses Supabase magic-link authentication.</p>
+      <label>Email<input id="email" type="email" placeholder="you@example.com" /></label>
+      <button id="signInButton">Send magic link</button>
+      <div id="authMessage" class="subtle"></div>
+    </section>
+
+    <section id="appPanel" class="app-grid hidden">
+      <aside class="sidebar panel">
+        <div class="section-heading">
+          <h2>Workspaces</h2>
+          <button id="newWorkspaceButton" class="icon">+</button>
+        </div>
+        <div id="workspaceList"></div>
+        <hr />
+        <div class="section-heading">
+          <h2>Threads</h2>
+          <button id="newThreadButton" class="icon" disabled>+</button>
+        </div>
+        <div id="threadList"></div>
+      </aside>
+
+      <section class="panel content-panel">
+        <div id="emptyState" class="empty">
+          <h2>Select a thread</h2>
+          <p>Create a workspace, create a thread, then run Council.</p>
+        </div>
+
+        <div id="threadView" class="hidden">
+          <div class="thread-header">
+            <div>
+              <h1 id="threadTitle"></h1>
+              <p id="threadObjective"></p>
+              <div class="meta"><span id="threadStatus" class="badge"></span><span id="threadRound"></span></div>
+            </div>
+            <button id="runCouncilButton">Run Council</button>
+          </div>
+
+          <div id="runMessage" class="subtle"></div>
+
+          <div class="section-heading spaced">
+            <h2>Live deliberation</h2>
+            <span id="contributionCount" class="subtle"></span>
+          </div>
+          <div id="contributions" class="cards"></div>
+
+          <div class="section-heading spaced"><h2>Decision</h2></div>
+          <div id="decision" class="decision muted">No synthesis yet.</div>
+
+          <div class="section-heading spaced"><h2>GitHub repository</h2></div>
+          <div class="row">
+            <input id="repoFullName" placeholder="owner/repository" />
+            <button id="mapRepoButton" class="secondary">Map repo</button>
+          </div>
+          <div id="repoMessage" class="subtle"></div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="workspaceDialog">
+    <form method="dialog" id="workspaceForm">
+      <h2>New workspace</h2>
+      <label>Name<input id="workspaceName" required maxlength="120" /></label>
+      <div class="dialog-actions"><button value="cancel" class="secondary">Cancel</button><button id="createWorkspaceButton" value="default">Create</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="threadDialog">
+    <form method="dialog" id="threadForm">
+      <h2>New thread</h2>
+      <label>Title<input id="newThreadTitle" required maxlength="200" /></label>
+      <label>Objective<textarea id="newThreadObjective" required rows="7" maxlength="20000"></textarea></label>
+      <div class="dialog-actions"><button value="cancel" class="secondary">Cancel</button><button id="createThreadButton" value="default">Create</button></div>
+    </form>
+  </dialog>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
