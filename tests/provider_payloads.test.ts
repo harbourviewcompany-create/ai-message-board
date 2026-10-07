@@ -25,6 +25,10 @@ Deno.test('Anthropic request uses output_config effort and JSON schema format', 
   assert(body.output_config?.effort === 'medium', 'Anthropic effort missing')
   assert(body.output_config?.format?.type === 'json_schema', 'Anthropic structured output missing')
   assert(body.output_config?.format?.schema?.required?.includes('summary'), 'Anthropic schema missing summary')
+  const schemaText = JSON.stringify(body.output_config.format.schema)
+  assert(!schemaText.includes('minLength'), 'Anthropic raw schema contains unsupported minLength')
+  assert(!schemaText.includes('maxItems'), 'Anthropic raw schema contains unsupported maxItems')
+  assert(!schemaText.includes('minimum'), 'Anthropic raw schema contains unsupported numeric constraints')
 })
 
 Deno.test('xAI Responses request uses reasoning envelope, cache key and structured output', () => {
