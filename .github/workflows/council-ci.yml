@@ -28,5 +28,7 @@ jobs:
           deno-version: v2.x
       - name: Type-check Council orchestrator
         run: deno check supabase/functions/council-orchestrator/index.ts
+      - name: Type-check Board reply
+        run: deno check supabase/functions/board-reply/index.ts
       - name: Type-check GitHub webhook
         run: deno check supabase/functions/github-webhook/index.ts
