@@ -3,5 +3,8 @@ project_id = "council"
 [functions.council-orchestrator]
 verify_jwt = false
 
+[functions.board-reply]
+verify_jwt = false
+
 [functions.github-webhook]
 verify_jwt = false

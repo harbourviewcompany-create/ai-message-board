@@ -44,9 +44,9 @@
       <div class="thread-header">
         <div>
           <h1 id="threadTitle"></h1><p id="threadObjective"></p>
-          <div class="meta"><span id="threadStatus" class="badge"></span><span id="threadRound"></span></div>
+          <div class="meta"><span id="threadMode" class="badge"></span><span id="threadStatus" class="badge"></span><span id="threadRound"></span></div>
         </div>
-        <div class="run-controls">
+        <div id="councilControls" class="run-controls">
           <select id="strategySelect">
             <option value="balanced">Balanced</option><option value="quality">Quality</option>
             <option value="fast">Fast</option><option value="economy">Economy</option>
@@ -54,20 +54,38 @@
           </select>
           <button id="runCouncilButton">Run Council</button>
         </div>
+        <div id="boardControls" class="run-controls hidden">
+          <select id="boardProviderSelect">
+            <option value="">Auto next AI</option>
+            <option value="openai">ChatGPT</option>
+            <option value="anthropic">Claude</option>
+            <option value="xai">Grok</option>
+          </select>
+          <button id="nextAIButton">Next AI</button>
+        </div>
       </div>
       <div id="runMessage" class="notice"></div>
 
-      <div class="section-heading spaced"><h2>Run history</h2><span id="runCount" class="subtle"></span></div>
-      <div id="runHistory" class="run-history"></div>
+      <div id="boardComposer" class="board-composer hidden">
+        <textarea id="boardMessage" rows="3" placeholder="Add your message to the shared board…"></textarea>
+        <button id="sendBoardMessageButton">Send</button>
+      </div>
 
-      <div class="section-heading spaced"><h2>Live deliberation</h2><span id="contributionCount" class="subtle"></span></div>
+      <div id="councilRunSection">
+        <div class="section-heading spaced"><h2>Run history</h2><span id="runCount" class="subtle"></span></div>
+        <div id="runHistory" class="run-history"></div>
+      </div>
+
+      <div class="section-heading spaced"><h2 id="timelineHeading">Live deliberation</h2><span id="contributionCount" class="subtle"></span></div>
       <div id="contributions" class="cards"></div>
 
-      <div class="section-heading spaced"><h2>Decision</h2><span id="decisionStatus" class="badge hidden"></span></div>
-      <div id="decision" class="decision muted">No synthesis yet.</div>
-      <div id="decisionActions" class="decision-actions hidden">
-        <button id="acceptDecisionButton">Accept decision</button>
-        <button id="rejectDecisionButton" class="danger">Reject</button>
+      <div id="decisionSection">
+        <div class="section-heading spaced"><h2>Decision</h2><span id="decisionStatus" class="badge hidden"></span></div>
+        <div id="decision" class="decision muted">No synthesis yet.</div>
+        <div id="decisionActions" class="decision-actions hidden">
+          <button id="acceptDecisionButton">Accept decision</button>
+          <button id="rejectDecisionButton" class="danger">Reject</button>
+        </div>
       </div>
 
       <div class="section-heading spaced"><h2>Provider runs</h2></div>
@@ -82,7 +100,7 @@
 </main>
 
 <dialog id="workspaceDialog"><form id="workspaceForm"><h2>New workspace</h2><label>Name<input id="workspaceName" required maxlength="120" /></label><div class="dialog-actions"><button type="button" data-close="workspaceDialog" class="secondary">Cancel</button><button>Create</button></div></form></dialog>
-<dialog id="threadDialog"><form id="threadForm"><h2>New thread</h2><label>Title<input id="newThreadTitle" required maxlength="200" /></label><label>Objective<textarea id="newThreadObjective" required rows="7" maxlength="20000"></textarea></label><div class="dialog-actions"><button type="button" data-close="threadDialog" class="secondary">Cancel</button><button>Create</button></div></form></dialog>
+<dialog id="threadDialog"><form id="threadForm"><h2>New thread</h2><label>Mode<select id="newThreadMode"><option value="council">Council — structured deliberation</option><option value="board">Board — continuous shared chat</option></select></label><label>Title<input id="newThreadTitle" required maxlength="200" /></label><label>Objective<textarea id="newThreadObjective" required rows="7" maxlength="20000"></textarea></label><div class="dialog-actions"><button type="button" data-close="threadDialog" class="secondary">Cancel</button><button>Create</button></div></form></dialog>
 <dialog id="settingsDialog"><form id="settingsForm"><h2>Council settings</h2>
   <label>Default strategy<select id="settingsStrategy"><option value="balanced">Balanced</option><option value="quality">Quality</option><option value="fast">Fast</option><option value="economy">Economy</option><option value="adversarial">Adversarial</option></select></label>
   <div class="check-grid">

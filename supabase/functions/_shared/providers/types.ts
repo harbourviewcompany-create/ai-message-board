@@ -1,4 +1,4 @@
-export type Phase = 'proposal' | 'critique' | 'synthesis'
+export type Phase = 'proposal' | 'critique' | 'synthesis' | 'message'
 export type CouncilStrategy = 'balanced' | 'quality' | 'fast' | 'economy' | 'adversarial'
 export type ReasoningEffort = 'low' | 'medium' | 'high'
 
