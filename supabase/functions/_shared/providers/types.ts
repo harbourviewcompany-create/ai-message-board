@@ -1,4 +1,6 @@
 export type Phase = 'proposal' | 'critique' | 'synthesis'
+export type CouncilStrategy = 'balanced' | 'quality' | 'fast' | 'economy' | 'adversarial'
+export type ReasoningEffort = 'low' | 'medium' | 'high'
 
 export interface SharedContribution {
   agent: string
@@ -15,7 +17,10 @@ export interface SharedContribution {
 }
 
 export interface ProviderInput {
+  threadId: string
+  runId: string
   phase: Phase
+  strategy: CouncilStrategy
   title: string
   objective: string
   existing: SharedContribution[]
@@ -36,6 +41,13 @@ export interface ProviderResult {
   model: string
   normalized: NormalizedResult
   usage: Record<string, unknown>
+}
+
+export interface AdapterOptions {
+  model: string
+  timeoutMs: number
+  maxRetries: number
+  effort: ReasoningEffort
 }
 
 export interface ProviderAdapter {

@@ -7,105 +7,99 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div>
-      <div class="brand">Council</div>
-      <div class="subtle">Shared deliberation for ChatGPT, Claude, Grok and GitHub</div>
+<header class="topbar">
+  <div><div class="brand">Council</div><div class="subtle">Multi-model deliberation with shared memory and GitHub context</div></div>
+  <div class="top-actions">
+    <span id="providerHealth" class="provider-health"></span>
+    <span id="connectionBadge" class="badge">Not configured</span>
+    <button id="connectionSettingsButton" class="secondary">Connection</button>
+    <button id="signOutButton" class="secondary hidden">Sign out</button>
+  </div>
+</header>
+<main>
+<section id="setupPanel" class="panel narrow">
+  <h1>Connect Council</h1>
+  <p>Use the public Supabase URL and publishable key. Authorization is enforced by RLS.</p>
+  <label>Supabase URL<input id="supabaseUrl" /></label>
+  <label>Publishable key<input id="supabaseKey" /></label>
+  <button id="saveConnection">Save connection</button>
+</section>
+<section id="authPanel" class="panel narrow hidden">
+  <h1>Sign in</h1><p>Sign in with a Supabase magic link.</p>
+  <label>Email<input id="email" type="email" placeholder="you@example.com" /></label>
+  <button id="signInButton">Send magic link</button><div id="authMessage" class="subtle"></div>
+</section>
+<section id="appPanel" class="app-grid hidden">
+  <aside class="sidebar panel">
+    <div class="section-heading"><h2>Workspaces</h2><button id="newWorkspaceButton" class="icon">+</button></div>
+    <div id="workspaceList"></div>
+    <div class="sidebar-actions"><button id="workspaceSettingsButton" class="secondary" disabled>Council settings</button></div>
+    <hr />
+    <div class="section-heading"><h2>Threads</h2><button id="newThreadButton" class="icon" disabled>+</button></div>
+    <div id="threadList"></div>
+  </aside>
+  <section class="panel content-panel">
+    <div id="emptyState" class="empty"><div><h2>Select a thread</h2><p>Create a workspace and thread, then run Council.</p></div></div>
+    <div id="threadView" class="hidden">
+      <div class="thread-header">
+        <div>
+          <h1 id="threadTitle"></h1><p id="threadObjective"></p>
+          <div class="meta"><span id="threadStatus" class="badge"></span><span id="threadRound"></span></div>
+        </div>
+        <div class="run-controls">
+          <select id="strategySelect">
+            <option value="balanced">Balanced</option><option value="quality">Quality</option>
+            <option value="fast">Fast</option><option value="economy">Economy</option>
+            <option value="adversarial">Adversarial</option>
+          </select>
+          <button id="runCouncilButton">Run Council</button>
+        </div>
+      </div>
+      <div id="runMessage" class="notice"></div>
+
+      <div class="section-heading spaced"><h2>Run history</h2><span id="runCount" class="subtle"></span></div>
+      <div id="runHistory" class="run-history"></div>
+
+      <div class="section-heading spaced"><h2>Live deliberation</h2><span id="contributionCount" class="subtle"></span></div>
+      <div id="contributions" class="cards"></div>
+
+      <div class="section-heading spaced"><h2>Decision</h2><span id="decisionStatus" class="badge hidden"></span></div>
+      <div id="decision" class="decision muted">No synthesis yet.</div>
+      <div id="decisionActions" class="decision-actions hidden">
+        <button id="acceptDecisionButton">Accept decision</button>
+        <button id="rejectDecisionButton" class="danger">Reject</button>
+      </div>
+
+      <div class="section-heading spaced"><h2>Provider runs</h2></div>
+      <div id="agentRuns" class="run-history"></div>
+
+      <div class="section-heading spaced"><h2>GitHub context</h2></div>
+      <div class="row"><input id="repoFullName" placeholder="owner/repository" /><button id="mapRepoButton" class="secondary">Map repo</button></div>
+      <div id="repoMessage" class="subtle"></div>
     </div>
-    <div class="top-actions">
-      <span id="connectionBadge" class="badge">Not configured</span>
-      <button id="settingsButton" class="secondary">Settings</button>
-      <button id="signOutButton" class="secondary hidden">Sign out</button>
-    </div>
-  </header>
+  </section>
+</section>
+</main>
 
-  <main>
-    <section id="setupPanel" class="panel narrow">
-      <h1>Connect Council</h1>
-      <p>Enter the public Supabase project URL and publishable key. They are safe for browser use when RLS is enabled.</p>
-      <label>Supabase URL<input id="supabaseUrl" placeholder="https://project-ref.supabase.co" /></label>
-      <label>Publishable key<input id="supabaseKey" placeholder="sb_publishable_..." /></label>
-      <button id="saveSettings">Save connection</button>
-    </section>
+<dialog id="workspaceDialog"><form id="workspaceForm"><h2>New workspace</h2><label>Name<input id="workspaceName" required maxlength="120" /></label><div class="dialog-actions"><button type="button" data-close="workspaceDialog" class="secondary">Cancel</button><button>Create</button></div></form></dialog>
+<dialog id="threadDialog"><form id="threadForm"><h2>New thread</h2><label>Title<input id="newThreadTitle" required maxlength="200" /></label><label>Objective<textarea id="newThreadObjective" required rows="7" maxlength="20000"></textarea></label><div class="dialog-actions"><button type="button" data-close="threadDialog" class="secondary">Cancel</button><button>Create</button></div></form></dialog>
+<dialog id="settingsDialog"><form id="settingsForm"><h2>Council settings</h2>
+  <label>Default strategy<select id="settingsStrategy"><option value="balanced">Balanced</option><option value="quality">Quality</option><option value="fast">Fast</option><option value="economy">Economy</option><option value="adversarial">Adversarial</option></select></label>
+  <div class="check-grid">
+    <label><input id="enableOpenAI" type="checkbox" /> ChatGPT / OpenAI</label>
+    <label><input id="enableAnthropic" type="checkbox" /> Claude / Anthropic</label>
+    <label><input id="enableXAI" type="checkbox" /> Grok / xAI</label>
+    <label><input id="requireApproval" type="checkbox" /> Require human approval</label>
+  </div>
+  <label>OpenAI proposal model<input id="openAIModel" /></label>
+  <label>OpenAI synthesis model<input id="openAISynthesisModel" /></label>
+  <label>Claude model<input id="anthropicModel" /></label>
+  <label>Grok model<input id="xaiModel" /></label>
+  <div class="two-col"><label>Provider timeout (ms)<input id="providerTimeout" type="number" min="5000" max="90000" /></label><label>Retries<input id="maxRetries" type="number" min="0" max="3" /></label></div>
+  <div class="dialog-actions"><button type="button" data-close="settingsDialog" class="secondary">Cancel</button><button>Save settings</button></div>
+</form></dialog>
 
-    <section id="authPanel" class="panel narrow hidden">
-      <h1>Sign in</h1>
-      <p>Council v1 uses Supabase magic-link authentication.</p>
-      <label>Email<input id="email" type="email" placeholder="you@example.com" /></label>
-      <button id="signInButton">Send magic link</button>
-      <div id="authMessage" class="subtle"></div>
-    </section>
-
-    <section id="appPanel" class="app-grid hidden">
-      <aside class="sidebar panel">
-        <div class="section-heading">
-          <h2>Workspaces</h2>
-          <button id="newWorkspaceButton" class="icon">+</button>
-        </div>
-        <div id="workspaceList"></div>
-        <hr />
-        <div class="section-heading">
-          <h2>Threads</h2>
-          <button id="newThreadButton" class="icon" disabled>+</button>
-        </div>
-        <div id="threadList"></div>
-      </aside>
-
-      <section class="panel content-panel">
-        <div id="emptyState" class="empty">
-          <h2>Select a thread</h2>
-          <p>Create a workspace, create a thread, then run Council.</p>
-        </div>
-
-        <div id="threadView" class="hidden">
-          <div class="thread-header">
-            <div>
-              <h1 id="threadTitle"></h1>
-              <p id="threadObjective"></p>
-              <div class="meta"><span id="threadStatus" class="badge"></span><span id="threadRound"></span></div>
-            </div>
-            <button id="runCouncilButton">Run Council</button>
-          </div>
-
-          <div id="runMessage" class="subtle"></div>
-
-          <div class="section-heading spaced">
-            <h2>Live deliberation</h2>
-            <span id="contributionCount" class="subtle"></span>
-          </div>
-          <div id="contributions" class="cards"></div>
-
-          <div class="section-heading spaced"><h2>Decision</h2></div>
-          <div id="decision" class="decision muted">No synthesis yet.</div>
-
-          <div class="section-heading spaced"><h2>GitHub repository</h2></div>
-          <div class="row">
-            <input id="repoFullName" placeholder="owner/repository" />
-            <button id="mapRepoButton" class="secondary">Map repo</button>
-          </div>
-          <div id="repoMessage" class="subtle"></div>
-        </div>
-      </section>
-    </section>
-  </main>
-
-  <dialog id="workspaceDialog">
-    <form method="dialog" id="workspaceForm">
-      <h2>New workspace</h2>
-      <label>Name<input id="workspaceName" required maxlength="120" /></label>
-      <div class="dialog-actions"><button value="cancel" class="secondary">Cancel</button><button id="createWorkspaceButton" value="default">Create</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="threadDialog">
-    <form method="dialog" id="threadForm">
-      <h2>New thread</h2>
-      <label>Title<input id="newThreadTitle" required maxlength="200" /></label>
-      <label>Objective<textarea id="newThreadObjective" required rows="7" maxlength="20000"></textarea></label>
-      <div class="dialog-actions"><button value="cancel" class="secondary">Cancel</button><button id="createThreadButton" value="default">Create</button></div>
-    </form>
-  </dialog>
-
-  <script src="./config.js"></script>\n  <script type="module" src="./app.js"></script>
+<script src="./config.js"></script>
+<script type="module" src="./app.js"></script>
 </body>
 </html>

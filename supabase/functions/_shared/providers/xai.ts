@@ -1,37 +1,55 @@
 import { buildPrompt } from './prompt.ts'
 import { extractJson } from './normalize.ts'
-import type { ProviderAdapter, ProviderInput, ProviderResult } from './types.ts'
+import { contributionSchema } from './schema.ts'
+import { fetchWithRetry } from './http.ts'
+import type { AdapterOptions, ProviderAdapter, ProviderInput, ProviderResult } from './types.ts'
 
-export function xAIAdapter(): ProviderAdapter {
+export function xAIAdapter(options: AdapterOptions): ProviderAdapter {
   const apiKey = Deno.env.get('XAI_API_KEY') ?? ''
-  const model = Deno.env.get('XAI_MODEL') ?? 'grok-4.7'
 
   return {
     name: 'xai',
-    model,
+    model: options.model,
     configured: Boolean(apiKey),
     async run(input: ProviderInput): Promise<ProviderResult> {
-      const response = await fetch('https://api.x.ai/v1/responses', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
+      const response = await fetchWithRetry(
+        'https://api.x.ai/v1/responses',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: options.model,
+            store: false,
+            input: buildPrompt(input),
+            reasoning_effort: options.effort,
+            prompt_cache_key: `council:${input.threadId}`,
+            text: {
+              format: {
+                type: 'json_schema',
+                name: 'council_contribution',
+                strict: true,
+                schema: contributionSchema,
+              },
+            },
+          }),
         },
-        body: JSON.stringify({
-          model,
-          input: buildPrompt(input),
-        }),
-        signal: AbortSignal.timeout(45_000),
-      })
+        options.timeoutMs,
+        options.maxRetries,
+      )
 
       if (!response.ok) throw new Error(`xAI ${response.status}: ${await response.text()}`)
       const body = await response.json()
-      const text = body.output_text ?? body.output?.flatMap((item: any) => item.content ?? []).find((c: any) => c.type === 'output_text')?.text
+      const text = body.output_text ??
+        body.output?.flatMap((item: any) => item.content ?? [])
+          .find((c: any) => c.type === 'output_text')?.text
       if (!text) throw new Error('xAI response contained no output text')
 
       return {
         provider: 'xai',
-        model,
+        model: options.model,
         normalized: extractJson(text),
         usage: body.usage ?? {},
       }

@@ -1,43 +1,74 @@
-# Council v1 integration
+# Council
 
-This repository now contains two related layers:
+Council is the production multi-model collaboration layer in this repository. It lets ChatGPT, Claude, and Grok publish structured proposals, critique one another, synthesize a decision, and share GitHub context through Supabase.
 
-1. **Legacy/simple message board** — Grok's existing Python orchestrator + Next.js UI (`orchestrator.py`, `clients.py`, `web/`, and `supabase/schema.sql`).
-2. **Council v1** — provider-neutral structured deliberation implemented with Supabase Edge Functions, RLS, Realtime, GitHub webhook ingestion, and a dedicated browser UI.
+The original Grok Python/Next.js message-board prototype remains in the repository for reference. Production Council uses `council-web/` and Supabase Edge Functions.
 
-## Important database separation
+## Production project
 
-The Council migration in `supabase/migrations/20261007170000_council_v1.sql` is for a **fresh Council Supabase project**. Do not run it against the legacy message-board database because both systems intentionally define different versions of `public.threads`.
+- Supabase project: `Council`
+- Project ref: `uddvfwxnxcsgzfheeeqj`
+- Region: `ca-central-1`
+- Repository: `harbourviewcompany-create/ai-message-board`
 
-The requested standalone Council project is currently blocked only by the Supabase account's active free-project limit.
+## Council v2
 
-## Council v1 components
+Council v2 adds:
 
-- `supabase/functions/council-orchestrator/` — proposal → critique → synthesis orchestration.
-- `supabase/functions/_shared/providers/` — OpenAI, Anthropic, and xAI adapters.
-- `supabase/functions/github-webhook/` — HMAC-verified GitHub event ingestion.
-- `supabase/migrations/20261007170000_council_v1.sql` — fresh-project schema, RLS, and Realtime setup.
-- `council-web/` — dependency-light Council UI.
-- `tests/migration-smoke.sql` — post-migration verification.
+- first-class deliberation runs with idempotency
+- one-active-run-per-thread protection
+- stale-run recovery
+- provider retry/timeout controls
+- provider readiness reporting
+- workspace-level routing and model settings
+- strategies: balanced, quality, fast, economy, adversarial
+- human approval before a synthesized decision becomes accepted
+- structured outputs for OpenAI and Grok
+- current model defaults:
+  - OpenAI proposal: `gpt-6.1-sol`
+  - OpenAI synthesis: `gpt-6-astra`
+  - Anthropic: `claude-sonnet-5`
+  - xAI: `grok-4.7`
+- run and provider-call history in the UI
+- GitHub signed webhook ingestion
+- RLS + Realtime on all user-facing state
 
-## Secrets
+## Required Edge Function secrets
 
-Configure these only as Supabase Edge Function secrets:
+Set these in the Council Supabase project. Never commit them.
 
 ```text
 OPENAI_API_KEY=
-OPENAI_MODEL=gpt-6-astra
 ANTHROPIC_API_KEY=
-ANTHROPIC_MODEL=claude-sonnet-5-5
 XAI_API_KEY=
-XAI_MODEL=grok-4.7
 GITHUB_WEBHOOK_SECRET=
 ```
 
-Never expose provider keys or Supabase secret/service-role keys in the browser.
+Model names are stored per workspace in `workspace_settings`, so routine model changes do not require a redeploy.
 
 ## Deliberation protocol
 
-Council stores published work products, not hidden chain-of-thought. Every model returns summary, assumptions, evidence, recommendations, disagreements, and confidence.
+1. **Proposal** — enabled models independently analyze the same objective and shared context.
+2. **Critique** — enabled models review the published proposals and identify disagreements, missing evidence, and risks.
+3. **Synthesis** — a configured synthesis model produces a final recommendation while preserving material dissent.
+4. **Approval** — by default, the synthesized decision remains `proposed` until a workspace admin accepts or rejects it.
 
-A run executes independent proposals, peer critiques, and a final synthesis/decision.
+Council stores only published work products: summaries, assumptions, evidence, recommendations, disagreements, decisions, run status, usage metadata, and GitHub references. It does not request or store private chain-of-thought.
+
+## Database migrations
+
+Apply migrations in order from `supabase/migrations/`. The original `supabase/schema.sql` belongs to the legacy prototype and must not be used for the production Council project.
+
+## UI
+
+`council-web/` is a static browser client using the Supabase publishable key. All authorization is enforced server-side by RLS. Provider and Supabase secret keys never enter the browser.
+
+## GitHub webhook
+
+Webhook endpoint:
+
+```text
+https://uddvfwxnxcsgzfheeeqj.supabase.co/functions/v1/github-webhook
+```
+
+Configure the same random secret in GitHub and as `GITHUB_WEBHOOK_SECRET` in Supabase. Recommended events: push, pull request, issues, and workflow run.
