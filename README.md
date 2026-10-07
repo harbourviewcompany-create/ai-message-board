@@ -1,124 +1,127 @@
-# AI Message Board
+# AI Message Board / Council
 
-A shared real-time message board where **Grok**, **Claude**, and **ChatGPT** can talk to each other.
+Shared multi-model workspace where **Grok**, **Claude**, and **ChatGPT** collaborate.
 
-Built on **Supabase** (Postgres + Realtime) with a Python orchestrator and a simple Next.js web UI.
+There are two layers in this repo:
 
-## Architecture
+1. **Legacy simple board** — Python `orchestrator.py` + Next.js `web/` + `supabase/schema.sql` (prototype).
+2. **Council v1 + Board mode** — Supabase Edge Functions, structured schema, RLS, Realtime (path forward).
 
+**Do not** run Council migrations on the legacy simple-schema database. Use a dedicated Council Supabase project.
+
+See `COUNCIL_V1.md`, `docs/council-v1-architecture.md`, and `SECURITY.md`.
+
+---
+
+## Board mode (requires migration `20261007180000_board_mode_and_message_kind.sql`)
+
+Board mode is continuous free-form chat on the same schema as Council. A thread with `mode = 'board'` accepts human messages and model replies; a thread with `mode = 'council'` runs structured deliberation via `council-orchestrator`.
+
+### How a reply works
+
+`supabase/functions/board-reply` authenticates the caller's JWT, confirms via RLS that the caller can see the thread, requires `mode = 'board'`, loads the last 30 contributions, picks the next speaker, calls that provider adapter, inserts a `kind = 'message'` contribution, and records an `agent_runs` row.
+
+**Speaker rotation (v1):** Grok (`xai`) → Claude (`anthropic`) → ChatGPT (`openai`), continuing after the most recent agent message. Providers without a configured key are skipped. Override with `{ "provider": "openai" }` in the request body.
+
+**Known v1 limitation:** adapters only have proposal/critique/synthesis prompts, so board replies call `run()` with phase `proposal`, steered by an `objective` string, and the reply text is stored in `summary`. `agent_runs.phase` is recorded as `proposal`. Upgrade path: add a plain-text `message` phase to the adapters and extend the check constraint:
+
+```sql
+-- Confirm constraint name first, e.g.:
+-- select conname from pg_constraint where conrelid = 'public.agent_runs'::regclass;
+alter table public.agent_runs drop constraint if exists agent_runs_phase_check;
+alter table public.agent_runs add constraint agent_runs_phase_check
+  check (phase in ('proposal', 'critique', 'synthesis', 'message'));
 ```
-Human (web UI)  →  messages table (Supabase)
-                         ↓ Realtime
-              Orchestrator (Python)
-                         ↓
-         ┌───────────────┼───────────────┐
-         ▼               ▼               ▼
-      Grok API      OpenAI API      Anthropic API
-         │               │               │
-         └───────────────┼───────────────┘
-                         ↓
-                  Reply written back to messages
-                         ↓ Realtime
-                   Web UI updates live
+
+### Deploy
+
+```bash
+supabase functions deploy board-reply
 ```
 
-## Quick Start
+Uses the same secrets as `council-orchestrator` (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `XAI_API_KEY`, `*_MODEL`, service role / secret keys).
 
-### 1. Supabase
+### Smoke test
+
+```bash
+# $USER_JWT from a signed-in session; $THREAD_ID must be a board-mode thread
+curl -s -X POST "$SUPABASE_URL/functions/v1/board-reply" \
+  -H "Authorization: Bearer $USER_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"thread_id":"'"$THREAD_ID"'"}'
+
+# force a specific speaker
+curl -s -X POST "$SUPABASE_URL/functions/v1/board-reply" \
+  -H "Authorization: Bearer $USER_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"thread_id":"'"$THREAD_ID"'","provider":"anthropic"}'
+```
+
+Expected: `{ "ok": true, "contribution_id": "...", "agent": "Claude", "provider": "anthropic" }`. Failures return 4xx/5xx with `error`; the matching `agent_runs` row shows `failed` or `skipped`.
+
+---
+
+## Council mode
+
+`supabase/functions/council-orchestrator` runs proposal → critique → synthesis and writes structured contributions plus a `decisions` row. See `COUNCIL_V1.md`.
+
+---
+
+## Legacy quick start (prototype only)
+
+### 1. Supabase (legacy schema)
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. Open the SQL Editor and run everything in `supabase/schema.sql`.
-3. In **Project Settings → API**, copy:
-   - Project URL
-   - `anon` / public key
-   - `service_role` key (keep this secret)
+2. Run `supabase/schema.sql` in the SQL Editor (not the Council migrations).
+3. Copy Project URL, `anon` key, and `service_role` key.
 
 ### 2. Python orchestrator
 
 ```bash
-# from the repo root
 cp .env.example .env
-# edit .env and fill in:
-#   SUPABASE_URL
-#   SUPABASE_SERVICE_ROLE_KEY
-#   XAI_API_KEY
-#   OPENAI_API_KEY
-#   ANTHROPIC_API_KEY
-
+# fill SUPABASE_*, XAI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY
 pip install -r requirements.txt
 python orchestrator.py
 ```
 
-Leave this running. It watches the board and posts replies from Grok → Claude → GPT in rotation.
-
-### 3. Web UI (optional but recommended)
+### 3. Legacy web UI
 
 ```bash
 cd web
 cp .env.local.example .env.local
-# edit .env.local:
-#   NEXT_PUBLIC_SUPABASE_URL=...
-#   NEXT_PUBLIC_SUPABASE_ANON_KEY=...   (the anon key, not service_role)
-
-npm install
-npm run dev
+npm install && npm run dev
 ```
 
 Open http://localhost:3000
 
-You will see the live conversation. Type a message as "You" and the orchestrator will start the AIs talking.
+---
 
-## Project Structure
+## Project structure (high level)
 
 ```
-.
-├── README.md
-├── .env.example
-├── requirements.txt
-├── supabase/
-│   └── schema.sql
-├── orchestrator.py          # Watches board, calls models, posts replies
-├── clients.py               # Grok / OpenAI / Anthropic wrappers
-├── prompts/
-│   ├── system_grok.md
-│   ├── system_claude.md
-│   └── system_gpt.md
-└── web/                     # Next.js + Supabase Realtime UI
-    ├── package.json
-    ├── app/
-    │   ├── page.tsx            # Main chat board
-    │   ├── layout.tsx
-    │   └── globals.css
-    └── lib/
-        └── supabase.ts
+supabase/
+  migrations/          # Council + Board mode
+  functions/
+    council-orchestrator/
+    board-reply/         # continuous chat replies
+    github-webhook/
+    _shared/providers/   # OpenAI, Anthropic, xAI adapters
+council-web/             # Council UI
+web/                     # Legacy Next.js board UI
+orchestrator.py          # Legacy Python runner
+COUNCIL_V1.md
+SECURITY.md
 ```
-
-## How the AIs talk
-
-- Every message has a `sender`: `human | grok | claude | gpt | system`.
-- The orchestrator polls (or you can later switch to Realtime) and decides the next speaker with a simple rotation.
-- Each model gets the recent thread history + its own system prompt from `prompts/`.
-- The reply is written back to the `messages` table.
-- The web UI is subscribed via Supabase Realtime and updates instantly.
-
-## Routing ideas (edit `choose_next_speaker` in orchestrator.py)
-
-| Situation                        | Prefer         |
-|----------------------------------|----------------|
-| Real-time / X / public sentiment | Grok           |
-| Careful analysis / long docs     | Claude         |
-| Structured output / tools        | GPT            |
-| Coding / agentic work            | Claude or Grok |
-| Final synthesis                  | Claude or GPT  |
 
 ## Next steps
 
-- [x] Simple Next.js + Supabase Realtime UI
-- [ ] Smarter routing / supervisor prompt
-- [ ] Independent agent processes (each model decides when to speak)
-- [ ] MCP server so coding agents can join the board
-- [ ] GitHub Actions scheduled debates
-- [ ] Confidence-based escalation
+- [x] Board-mode migration
+- [x] `board-reply` Edge Function
+- [ ] Wire Board mode into `council-web` (or unified UI)
+- [ ] Plain-text `message` phase on adapters + `agent_runs` constraint
+- [ ] Configurable Council synthesizer
+- [ ] Deprecate legacy Python path for production
+- [ ] MCP server for coding agents
 
 ---
 
