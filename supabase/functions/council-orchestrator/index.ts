@@ -1,6 +1,8 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { serviceClient, userClient } from '../_shared/supabase.ts'
+import { compactContributions, compactGithubContext } from '../_shared/context.ts'
+import { councilProviderBudget } from '../_shared/providers/budget.ts'
 import {
   anthropicAdapter,
   openAIAdapter,
@@ -124,8 +126,7 @@ async function runPhase(
 
 function buildAdapters(settings: any, phase: Phase, strategy: CouncilStrategy) {
   const effort = effortFor(strategy, phase)
-  const timeoutMs = Number(settings.provider_timeout_ms ?? 35000)
-  const maxRetries = Number(settings.max_retries ?? 1)
+  const { timeoutMs, maxRetries } = councilProviderBudget(settings, strategy)
 
   const openAIModel = phase === 'synthesis'
     ? (strategy === 'economy' || strategy === 'fast'
@@ -134,7 +135,7 @@ function buildAdapters(settings: any, phase: Phase, strategy: CouncilStrategy) {
     : strategy === 'quality' || strategy === 'adversarial'
       ? settings.openai_synthesis_model
       : strategy === 'economy'
-        ? (settings.openai_economy_model ?? settings.openai_model ?? 'gpt-6-luna')
+        ? (settings.openai_economy_model ?? 'gpt-6-luna')
         : settings.openai_model
 
   const adapters: ProviderAdapter[] = []
@@ -202,11 +203,13 @@ Deno.serve(async (req) => {
     enable_xai: true,
     openai_model: 'gpt-6.1-sol',
     openai_synthesis_model: 'gpt-6-astra',
-    anthropic_model: 'claude-sonnet-5',
+    anthropic_model: 'claude-sonnet-5-5',
     xai_model: 'grok-4.7',
-    max_context_contributions: 30,
-    provider_timeout_ms: 35000,
-    max_retries: 1,
+    openai_economy_model: 'gpt-6-luna',
+    max_context_contributions: 18,
+    max_context_chars: 18000,
+    provider_timeout_ms: 30000,
+    max_retries: 0,
   }
 
   const strategy = (body?.strategy ?? settings.strategy ?? 'balanced') as CouncilStrategy
@@ -246,14 +249,26 @@ Deno.serve(async (req) => {
 
   if (createRunError) {
     if (createRunError.code === '23505') {
-      const { data: existingRun } = await db.from('council_runs')
+      const { data: sameRun } = await db.from('council_runs')
+        .select('*')
+        .eq('thread_id', thread.id)
+        .eq('idempotency_key', idempotencyKey)
+        .maybeSingle()
+
+      if (sameRun) {
+        const status = sameRun.status === 'queued' || sameRun.status === 'running' ? 202 : 200
+        return json({ ok: sameRun.status !== 'failed', reused: true, run: sameRun }, status)
+      }
+
+      const { data: activeRun } = await db.from('council_runs')
         .select('*')
         .eq('thread_id', thread.id)
         .in('status', ['queued', 'running'])
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
-      return json({ ok: true, reused: true, run: existingRun }, 202)
+
+      if (activeRun) return json({ ok: true, reused: true, run: activeRun }, 202)
     }
     return json({ error: createRunError.message }, 500)
   }
@@ -261,7 +276,8 @@ Deno.serve(async (req) => {
   const runId = councilRun.id
 
   try {
-    const limit = Number(settings.max_context_contributions ?? 30)
+    const limit = Number(settings.max_context_contributions ?? 18)
+    const maxContextChars = Number(settings.max_context_chars ?? 18000)
     const { data: existingRows } = await db.from('contributions')
       .select('agent, provider, model, kind, round, summary, assumptions, evidence, recommendations, disagreements, confidence')
       .eq('thread_id', thread.id)
@@ -287,14 +303,15 @@ Deno.serve(async (req) => {
       return json({ error: 'No provider API keys are configured', run_id: runId }, 503)
     }
 
-    const baseExisting = [...(existingRows ?? [])].reverse() as SharedContribution[]
-    const proposals = await runPhase(db, runId, thread, 'proposal', 1, proposalAdapters, baseExisting, refs ?? [], strategy)
+    const baseExisting = compactContributions([...(existingRows ?? [])].reverse() as SharedContribution[], maxContextChars)
+    const githubContext = compactGithubContext(refs ?? [])
+    const proposals = await runPhase(db, runId, thread, 'proposal', 1, proposalAdapters, baseExisting, githubContext, strategy)
     if (!proposals.length) throw new Error('All configured providers failed during proposal phase')
 
     await db.from('council_runs').update({ current_phase: 'critique' }).eq('id', runId)
     await db.from('threads').update({ current_round: 2 }).eq('id', thread.id)
 
-    const critiqueContext = [...baseExisting, ...proposals] as SharedContribution[]
+    const critiqueContext = compactContributions([...baseExisting, ...proposals] as SharedContribution[], maxContextChars)
     const critiques = await runPhase(
       db,
       runId,
@@ -303,7 +320,7 @@ Deno.serve(async (req) => {
       2,
       buildAdapters(settings, 'critique', strategy),
       critiqueContext,
-      refs ?? [],
+      githubContext,
       strategy,
     )
 
@@ -318,7 +335,7 @@ Deno.serve(async (req) => {
 
     if (!synthesisAdapter) throw new Error('No provider is available for synthesis')
 
-    const synthesisContext = [...critiqueContext, ...critiques] as SharedContribution[]
+    const synthesisContext = compactContributions([...critiqueContext, ...critiques] as SharedContribution[], maxContextChars)
     const synthesis = await runPhase(
       db,
       runId,
@@ -327,7 +344,7 @@ Deno.serve(async (req) => {
       3,
       [synthesisAdapter],
       synthesisContext,
-      refs ?? [],
+      githubContext,
       strategy,
     )
     if (!synthesis.length) throw new Error('Synthesis failed')
