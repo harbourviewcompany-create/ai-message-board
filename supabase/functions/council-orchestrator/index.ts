@@ -134,7 +134,7 @@ function buildAdapters(settings: any, phase: Phase, strategy: CouncilStrategy) {
     : strategy === 'quality' || strategy === 'adversarial'
       ? settings.openai_synthesis_model
       : strategy === 'economy'
-        ? 'gpt-6-luna'
+        ? (settings.openai_economy_model ?? settings.openai_model ?? 'gpt-6-luna')
         : settings.openai_model
 
   const adapters: ProviderAdapter[] = []
@@ -176,10 +176,17 @@ Deno.serve(async (req) => {
 
   const { data: thread, error: threadError } = await caller
     .from('threads')
-    .select('id, workspace_id, title, objective, status')
+    .select('id, workspace_id, title, objective, status, mode')
     .eq('id', threadId)
     .single()
   if (threadError || !thread) return json({ error: 'Thread not found or forbidden' }, 404)
+
+  // Board threads use board-reply; structured deliberation is council-only.
+  if (thread.mode === 'board') {
+    return json({
+      error: "Thread is in board mode (use board-reply for continuous chat)",
+    }, 409)
+  }
 
   const { data: settingsRow } = await caller
     .from('workspace_settings')
