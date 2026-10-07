@@ -1,7 +1,7 @@
 project_id = "council"
 
 [functions.council-orchestrator]
-verify_jwt = true
+verify_jwt = false
 
 [functions.github-webhook]
 verify_jwt = false
