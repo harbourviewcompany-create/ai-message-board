@@ -13,6 +13,7 @@ const state = {
   settings: null,
   health: null,
   decision: null,
+  refreshTimer: null,
 }
 
 function config() {
@@ -227,19 +228,22 @@ async function openThread(id) {
 async function refreshThreadData() {
   if (!state.threadId) return
 
+  const isCouncil = threadMode() === 'council'
+  const empty = Promise.resolve({ data: [] })
   const [
-    { data: contributions },
+    { data: contributionsDesc },
     { data: decisions },
     { data: thread },
     { data: runs },
     { data: agentRuns },
   ] = await Promise.all([
-    state.client.from('contributions').select('*').eq('thread_id', state.threadId).order('created_at'),
-    state.client.from('decisions').select('*').eq('thread_id', state.threadId).order('created_at', { ascending: false }).limit(1),
+    state.client.from('contributions').select('*').eq('thread_id', state.threadId).order('created_at', { ascending: false }).limit(200),
+    isCouncil ? state.client.from('decisions').select('*').eq('thread_id', state.threadId).order('created_at', { ascending: false }).limit(1) : empty,
     state.client.from('threads').select('*').eq('id', state.threadId).single(),
-    state.client.from('council_runs').select('*').eq('thread_id', state.threadId).order('created_at', { ascending: false }).limit(10),
+    isCouncil ? state.client.from('council_runs').select('*').eq('thread_id', state.threadId).order('created_at', { ascending: false }).limit(10) : empty,
     state.client.from('agent_runs').select('*').eq('thread_id', state.threadId).order('created_at', { ascending: false }).limit(30),
   ])
+  const contributions = [...(contributionsDesc ?? [])].reverse()
 
   if (thread) {
     state.currentThread = thread
@@ -321,11 +325,19 @@ function renderDecision(decision) {
   $('decisionActions').classList.toggle('hidden', !decision || decision.status !== 'proposed')
 }
 
+function scheduleThreadRefresh() {
+  if (state.refreshTimer) clearTimeout(state.refreshTimer)
+  state.refreshTimer = setTimeout(() => {
+    state.refreshTimer = null
+    refreshThreadData()
+  }, 120)
+}
+
 function subscribeThread() {
   clearChannels()
   if (!state.threadId) return
 
-  const refresh = () => refreshThreadData()
+  const refresh = () => scheduleThreadRefresh()
   const channel = state.client.channel(`council-thread-${state.threadId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'contributions', filter: `thread_id=eq.${state.threadId}` }, refresh)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'decisions', filter: `thread_id=eq.${state.threadId}` }, refresh)
@@ -492,10 +504,14 @@ $('workspaceSettingsButton').addEventListener('click', async () => {
   $('requireApproval').checked = settings.require_human_approval
   $('openAIModel').value = settings.openai_model
   $('openAISynthesisModel').value = settings.openai_synthesis_model
+  $('openAIEconomyModel').value = settings.openai_economy_model ?? 'gpt-6-luna'
   $('anthropicModel').value = settings.anthropic_model
   $('xaiModel').value = settings.xai_model
+  $('maxContextContributions').value = settings.max_context_contributions ?? 18
+  $('maxContextChars').value = settings.max_context_chars ?? 18000
   $('providerTimeout').value = settings.provider_timeout_ms
   $('maxRetries').value = settings.max_retries
+  $('boardStaleSeconds').value = settings.board_stale_after_seconds ?? 300
   $('settingsDialog').showModal()
 })
 
@@ -511,10 +527,14 @@ $('settingsForm').addEventListener('submit', async (event) => {
     require_human_approval: $('requireApproval').checked,
     openai_model: $('openAIModel').value.trim(),
     openai_synthesis_model: $('openAISynthesisModel').value.trim(),
+    openai_economy_model: $('openAIEconomyModel').value.trim(),
     anthropic_model: $('anthropicModel').value.trim(),
     xai_model: $('xaiModel').value.trim(),
+    max_context_contributions: Number($('maxContextContributions').value),
+    max_context_chars: Number($('maxContextChars').value),
     provider_timeout_ms: Number($('providerTimeout').value),
     max_retries: Number($('maxRetries').value),
+    board_stale_after_seconds: Number($('boardStaleSeconds').value),
   }
 
   const { data, error } = await state.client
