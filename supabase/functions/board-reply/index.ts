@@ -39,11 +39,15 @@ function effortFor(strategy: CouncilStrategy): ReasoningEffort {
 
 function configuredAdapters(settings: any): Record<ProviderKey, ProviderAdapter | null> {
   const { timeoutMs, maxRetries } = boardProviderBudget(settings)
-  const effort = effortFor((settings.strategy ?? 'balanced') as CouncilStrategy)
+  const strategy = (settings.strategy ?? 'balanced') as CouncilStrategy
+  const effort = effortFor(strategy)
+  const openAIModel = strategy === 'economy' || strategy === 'fast'
+    ? (settings.openai_economy_model ?? 'gpt-6-luna')
+    : (settings.openai_model ?? 'gpt-6.1-sol')
 
   return {
     openai: settings.enable_openai
-      ? openAIAdapter({ model: settings.openai_model ?? 'gpt-6.1-sol', timeoutMs, maxRetries, effort })
+      ? openAIAdapter({ model: openAIModel, timeoutMs, maxRetries, effort })
       : null,
     anthropic: settings.enable_anthropic
       ? anthropicAdapter({ model: settings.anthropic_model ?? 'claude-sonnet-5-5', timeoutMs, maxRetries, effort })
