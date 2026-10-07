@@ -72,3 +72,15 @@ https://uddvfwxnxcsgzfheeeqj.supabase.co/functions/v1/github-webhook
 ```
 
 Configure the same random secret in GitHub and as `GITHUB_WEBHOOK_SECRET` in Supabase. Recommended events: push, pull request, issues, and workflow run.
+
+
+## Board mode
+
+Threads can now explicitly use one of two modes:
+
+- `council` — structured proposal → critique → synthesis → optional human approval.
+- `board` — continuous shared conversation among the human, ChatGPT, Claude, and Grok.
+
+Board mode uses the same workspace provider settings, current model names, retry/timeout policy, RLS, Realtime, and GitHub context as Council mode. Each model reply has a request-level idempotency key so retries do not create duplicate replies.
+
+The `board-reply` Edge Function can rotate automatically through available providers or target one provider explicitly. Human board messages are inserted under RLS as `contribution_kind = 'message'`.
