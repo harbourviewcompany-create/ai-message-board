@@ -32,3 +32,7 @@ jobs:
         run: deno check supabase/functions/board-reply/index.ts
       - name: Type-check GitHub webhook
         run: deno check supabase/functions/github-webhook/index.ts
+      - name: Run Council regression tests
+        run: deno test tests/provider_payloads.test.ts tests/context.test.ts tests/budget.test.ts
+      - name: Check browser JavaScript syntax
+        run: node --check council-web/app.js
