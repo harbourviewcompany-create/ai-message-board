@@ -472,6 +472,7 @@ Deno.serve(async (req) => {
       ].join('\n'),
       supporting_contributions: proposals.map((p: any) => p.id),
       dissenting_contributions: critiques.map((c: any) => c.id),
+      action_items: Array.isArray(final.recommendations) ? final.recommendations : [],
       status: requiresApproval ? 'proposed' : 'accepted',
     }).select('*').single()
     if (decisionError) throw decisionError
