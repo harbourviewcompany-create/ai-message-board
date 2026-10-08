@@ -98,7 +98,7 @@ returns trigger
 language plpgsql
 security invoker
 set search_path = public, pg_temp
-as $
+as $$
 declare
   target_workspace uuid;
   actor uuid;
@@ -152,7 +152,7 @@ begin
 
   return new;
 end;
-$;
+$$;
 
 revoke all on function private.capture_accepted_decision_memory()
 from public, anon;
@@ -168,14 +168,14 @@ returns trigger
 language plpgsql
 security invoker
 set search_path = public, pg_temp
-as $
+as $$
 begin
   if new.workspace_id <> old.workspace_id or new.created_by <> old.created_by then
     raise exception 'workspace_id and created_by are immutable';
   end if;
   return new;
 end;
-$;
+$$;
 
 revoke all on function private.protect_workspace_provenance()
 from public, anon;
