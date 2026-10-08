@@ -318,11 +318,21 @@ function renderContributions(rows) {
 
 function renderDecision(decision) {
   const actionItems = Array.isArray(decision?.action_items) ? decision.action_items.filter(Boolean) : []
+  const assumptions = Array.isArray(decision?.assumptions) ? decision.assumptions.filter(Boolean) : []
+  const evidence = Array.isArray(decision?.evidence) ? decision.evidence.filter(Boolean) : []
+  const disagreements = Array.isArray(decision?.disagreements) ? decision.disagreements.filter(Boolean) : []
+  const auditSections = [
+    decision?.confidence == null ? '' : `Confidence: ${Math.round(Number(decision.confidence) * 100)}%`,
+    assumptions.length ? `Assumptions:\n${assumptions.map((item) => `- ${item}`).join('\n')}` : '',
+    evidence.length ? `Evidence:\n${evidence.map((item) => `- ${item}`).join('\n')}` : '',
+    disagreements.length ? `Dissent / unresolved disagreement:\n${disagreements.map((item) => `- ${item}`).join('\n')}` : '',
+  ].filter(Boolean)
+  const auditText = auditSections.length ? `\n\n${auditSections.join('\n\n')}` : ''
   const actionText = actionItems.length
     ? `\n\nAction items${decision.status === 'proposed' ? ' — created as tasks on acceptance' : ''}:\n${actionItems.map((item, index) => `${index + 1}. ${item}`).join('\n')}`
     : ''
   $('decision').textContent = decision
-    ? `${decision.decision}${decision.rationale ? `\n\n${decision.rationale}` : ''}${actionText}`
+    ? `${decision.decision}${decision.rationale ? `\n\n${decision.rationale}` : ''}${auditText}${actionText}`
     : 'No synthesis yet.'
 
   $('decision').classList.toggle('muted', !decision)
