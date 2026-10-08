@@ -214,6 +214,12 @@ Deno.serve(async (req) => {
       agentRunCount = agentsResult.count ?? 0
     }
 
+    const [memoryCountResult, taskCountResult, evidenceCountResult] = await Promise.all([
+      db.from('memory_items').select('id', { count: 'exact', head: true }).eq('workspace_id', workspaceId).eq('status', 'active'),
+      db.from('tasks').select('id', { count: 'exact', head: true }).eq('workspace_id', workspaceId).in('status', ['todo', 'in_progress', 'blocked']),
+      db.from('evidence_refs').select('id', { count: 'exact', head: true }).eq('workspace_id', workspaceId),
+    ])
+
     const { data: githubEvents } = await db.from('github_events')
       .select('event_name, repository_full_name, received_at')
       .eq('workspace_id', workspaceId)
@@ -231,6 +237,9 @@ Deno.serve(async (req) => {
         board_threads: threads.filter((row: any) => row.mode === 'board').length,
         council_runs: councilRunCount,
         agent_runs: agentRunCount,
+        memory_items: memoryCountResult.count ?? 0,
+        open_tasks: taskCountResult.count ?? 0,
+        evidence_refs: evidenceCountResult.count ?? 0,
       },
       providers: {
         openai: { enabled: Boolean(settings?.enable_openai), configured: Boolean(Deno.env.get('OPENAI_API_KEY')), model: settings?.openai_model ?? 'gpt-6.1-sol' },
