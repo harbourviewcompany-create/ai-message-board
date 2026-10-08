@@ -25,6 +25,9 @@ export interface ProviderInput {
   objective: string
   existing: SharedContribution[]
   githubContext: unknown[]
+  memoryContext: unknown[]
+  taskContext: unknown[]
+  evidenceContext: unknown[]
 }
 
 export interface NormalizedResult {
