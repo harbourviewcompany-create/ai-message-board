@@ -346,6 +346,9 @@ function subscribeThread() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'threads', filter: `id=eq.${state.threadId}` }, refresh)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_runs', filter: `thread_id=eq.${state.threadId}` }, refresh)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'council_runs', filter: `thread_id=eq.${state.threadId}` }, refresh)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'memory_items', filter: `workspace_id=eq.${state.workspaceId}` }, () => { if ($('knowledgeDialog').open) loadKnowledge() })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `workspace_id=eq.${state.workspaceId}` }, () => { if ($('knowledgeDialog').open) loadKnowledge() })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'evidence_refs', filter: `workspace_id=eq.${state.workspaceId}` }, () => { if ($('knowledgeDialog').open) loadKnowledge() })
     .subscribe()
 
   state.channels.push(channel)
@@ -656,6 +659,9 @@ $('runDiagnosticsButton').addEventListener('click', async () => {
     { label: 'GitHub events received', ok: Boolean(data.github?.latest_event), detail: data.github?.latest_event ? `${data.github.latest_event.event_name} · ${data.github.latest_event.repository_full_name}` : 'none yet' },
     { label: 'Council activity', ok: (data.database?.council_runs ?? 0) > 0, detail: `${data.database?.council_runs ?? 0} runs` },
     { label: 'Provider activity', ok: (data.database?.agent_runs ?? 0) > 0, detail: `${data.database?.agent_runs ?? 0} provider runs` },
+    { label: 'Memory', ok: (data.database?.memory_items ?? 0) > 0, detail: `${data.database?.memory_items ?? 0} active items` },
+    { label: 'Open tasks', ok: (data.database?.open_tasks ?? 0) > 0, detail: `${data.database?.open_tasks ?? 0} open` },
+    { label: 'Evidence', ok: (data.database?.evidence_refs ?? 0) > 0, detail: `${data.database?.evidence_refs ?? 0} refs` },
   ]
 
   $('diagnosticsSummary').innerHTML = cards.map((card) =>
