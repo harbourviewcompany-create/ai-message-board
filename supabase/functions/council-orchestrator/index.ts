@@ -3,6 +3,7 @@ import { corsHeaders } from '../_shared/cors.ts'
 import { serviceClient, userClient } from '../_shared/supabase.ts'
 import { compactContributions, compactEvidenceContext, compactGithubContext, compactMemoryContext, compactTaskContext } from '../_shared/context.ts'
 import { councilProviderBudget } from '../_shared/providers/budget.ts'
+import { routePhaseAdapters, strategyCallCeiling } from '../_shared/providers/routing.ts'
 import {
   anthropicAdapter,
   openAIAdapter,
@@ -394,7 +395,7 @@ Deno.serve(async (req) => {
 
     await db.from('threads').update({ status: 'running', current_round: 1 }).eq('id', thread.id)
 
-    const proposalAdapters = buildAdapters(settings, 'proposal', strategy)
+    const proposalAdapters = routePhaseAdapters(buildAdapters(settings, 'proposal', strategy), strategy, 'proposal')
     if (!proposalAdapters.some((a) => a.configured)) {
       await db.from('council_runs').update({
         status: 'failed',
@@ -423,7 +424,7 @@ Deno.serve(async (req) => {
       thread,
       'critique',
       2,
-      buildAdapters(settings, 'critique', strategy),
+      routePhaseAdapters(buildAdapters(settings, 'critique', strategy), strategy, 'critique'),
       critiqueContext,
       githubContext,
       memoryContext,
@@ -435,7 +436,7 @@ Deno.serve(async (req) => {
     await db.from('council_runs').update({ current_phase: 'synthesis' }).eq('id', runId)
     await db.from('threads').update({ current_round: 3 }).eq('id', thread.id)
 
-    const synthesisAdapters = buildAdapters(settings, 'synthesis', strategy)
+    const synthesisAdapters = routePhaseAdapters(buildAdapters(settings, 'synthesis', strategy), strategy, 'synthesis')
     const synthesisAdapter =
       synthesisAdapters.find((a) => a.name === 'openai' && a.configured) ??
       synthesisAdapters.find((a) => a.name === 'anthropic' && a.configured) ??
@@ -484,6 +485,11 @@ Deno.serve(async (req) => {
       providers_requested: providerNames,
       synthesis_provider: synthesisAdapter.name,
       synthesis_model: synthesisAdapter.model,
+      strategy_call_ceiling: strategyCallCeiling(
+        strategy,
+        buildAdapters(settings, 'proposal', strategy).filter((adapter) => adapter.configured).length,
+      ),
+      actual_model_calls: proposals.length + critiques.length + synthesis.length,
     }
 
     if (requiresApproval) {

@@ -48,9 +48,9 @@
         </div>
         <div id="councilControls" class="run-controls">
           <select id="strategySelect">
-            <option value="balanced">Balanced</option><option value="quality">Quality</option>
-            <option value="fast">Fast</option><option value="economy">Economy</option>
-            <option value="adversarial">Adversarial</option>
+            <option value="balanced">Balanced — full council</option><option value="quality">Quality — full council, high effort</option>
+            <option value="fast">Fast — up to 3 model calls</option><option value="economy">Economy — 2 model calls</option>
+            <option value="adversarial">Adversarial — full council red-team</option>
           </select>
           <button id="runCouncilButton">Run Council</button>
         </div>
@@ -102,7 +102,7 @@
 <dialog id="workspaceDialog"><form id="workspaceForm"><h2>New workspace</h2><label>Name<input id="workspaceName" required maxlength="120" /></label><div class="dialog-actions"><button type="button" data-close="workspaceDialog" class="secondary">Cancel</button><button>Create</button></div></form></dialog>
 <dialog id="threadDialog"><form id="threadForm"><h2>New thread</h2><label>Mode<select id="newThreadMode"><option value="council">Council — structured deliberation</option><option value="board">Board — continuous shared chat</option></select></label><label>Title<input id="newThreadTitle" required maxlength="200" /></label><label>Objective<textarea id="newThreadObjective" required rows="7" maxlength="20000"></textarea></label><div class="dialog-actions"><button type="button" data-close="threadDialog" class="secondary">Cancel</button><button>Create</button></div></form></dialog>
 <dialog id="settingsDialog"><form id="settingsForm"><h2>Council settings</h2>
-  <label>Default strategy<select id="settingsStrategy"><option value="balanced">Balanced</option><option value="quality">Quality</option><option value="fast">Fast</option><option value="economy">Economy</option><option value="adversarial">Adversarial</option></select></label>
+  <label>Default strategy<select id="settingsStrategy"><option value="balanced">Balanced — full council</option><option value="quality">Quality — full council, high effort</option><option value="fast">Fast — up to 3 model calls</option><option value="economy">Economy — 2 model calls</option><option value="adversarial">Adversarial — full council red-team</option></select></label>
   <div class="check-grid">
     <label><input id="enableOpenAI" type="checkbox" /> ChatGPT / OpenAI</label>
     <label><input id="enableAnthropic" type="checkbox" /> Claude / Anthropic</label>
