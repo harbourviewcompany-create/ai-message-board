@@ -33,7 +33,7 @@
   <aside class="sidebar panel">
     <div class="section-heading"><h2>Workspaces</h2><button id="newWorkspaceButton" class="icon">+</button></div>
     <div id="workspaceList"></div>
-    <div class="sidebar-actions"><button id="workspaceSettingsButton" class="secondary" disabled>Council settings</button></div>
+    <div class="sidebar-actions"><button id="workspaceSettingsButton" class="secondary" disabled>Council settings</button><button id="diagnosticsButton" class="secondary" disabled>Diagnostics</button></div>
     <hr />
     <div class="section-heading"><h2>Threads</h2><button id="newThreadButton" class="icon" disabled>+</button></div>
     <div id="threadList"></div>
@@ -119,6 +119,13 @@
   <label>Board stale-run guard (seconds)<input id="boardStaleSeconds" type="number" min="60" max="1800" /></label>
   <div class="dialog-actions"><button type="button" data-close="settingsDialog" class="secondary">Cancel</button><button>Save settings</button></div>
 </form></dialog>
+<dialog id="diagnosticsDialog">
+  <div class="section-heading"><h2>Production diagnostics</h2><button type="button" data-close="diagnosticsDialog" class="secondary">Close</button></div>
+  <p class="subtle">Read-only checks for Auth/RLS access, workspace state, provider configuration, and GitHub event flow.</p>
+  <button id="runDiagnosticsButton">Run checks</button>
+  <div id="diagnosticsSummary" class="diagnostics-grid"></div>
+  <pre id="diagnosticsRaw" class="diagnostics-raw hidden"></pre>
+</dialog>
 
 <script src="./config.js"></script>
 <script type="module" src="./app.js"></script>
