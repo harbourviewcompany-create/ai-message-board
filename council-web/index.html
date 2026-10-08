@@ -33,7 +33,7 @@
   <aside class="sidebar panel">
     <div class="section-heading"><h2>Workspaces</h2><button id="newWorkspaceButton" class="icon">+</button></div>
     <div id="workspaceList"></div>
-    <div class="sidebar-actions"><button id="workspaceSettingsButton" class="secondary" disabled>Council settings</button><button id="diagnosticsButton" class="secondary" disabled>Diagnostics</button></div>
+    <div class="sidebar-actions"><button id="workspaceSettingsButton" class="secondary" disabled>Council settings</button><button id="knowledgeButton" class="secondary" disabled>Memory, tasks & evidence</button><button id="diagnosticsButton" class="secondary" disabled>Diagnostics</button></div>
     <hr />
     <div class="section-heading"><h2>Threads</h2><button id="newThreadButton" class="icon" disabled>+</button></div>
     <div id="threadList"></div>
@@ -119,6 +119,54 @@
   <label>Board stale-run guard (seconds)<input id="boardStaleSeconds" type="number" min="60" max="1800" /></label>
   <div class="dialog-actions"><button type="button" data-close="settingsDialog" class="secondary">Cancel</button><button>Save settings</button></div>
 </form></dialog>
+<dialog id="knowledgeDialog">
+  <div class="section-heading"><h2>Workspace knowledge</h2><button type="button" data-close="knowledgeDialog" class="secondary">Close</button></div>
+  <p class="subtle">Active memory and open tasks are included automatically in Council and Board context.</p>
+  <div class="knowledge-grid">
+    <section>
+      <div class="section-heading"><h2>Memory</h2><button id="addMemoryButton" class="secondary" type="button">Add</button></div>
+      <div id="memoryList" class="knowledge-list"></div>
+    </section>
+    <section>
+      <div class="section-heading"><h2>Tasks</h2><button id="addTaskButton" class="secondary" type="button">Add</button></div>
+      <div id="taskList" class="knowledge-list"></div>
+    </section>
+    <section>
+      <div class="section-heading"><h2>Evidence</h2><button id="addEvidenceButton" class="secondary" type="button">Add</button></div>
+      <div id="evidenceList" class="knowledge-list"></div>
+    </section>
+  </div>
+</dialog>
+
+<dialog id="memoryDialog"><form id="memoryForm"><h2>Add memory</h2>
+  <label>Type<select id="memoryKind"><option value="fact">Fact</option><option value="decision">Decision</option><option value="rejected_approach">Rejected approach</option><option value="open_question">Open question</option><option value="incident">Incident</option><option value="note">Note</option></select></label>
+  <label>Title<input id="memoryTitle" required maxlength="200" /></label>
+  <label>Content<textarea id="memoryContent" required rows="6" maxlength="20000"></textarea></label>
+  <label class="inline-check"><input id="memoryCurrentThread" type="checkbox" /> Link to current thread</label>
+  <div class="dialog-actions"><button type="button" data-close="memoryDialog" class="secondary">Cancel</button><button>Save memory</button></div>
+</form></dialog>
+
+<dialog id="taskDialog"><form id="taskForm"><h2>Add task</h2>
+  <label>Title<input id="taskTitle" required maxlength="240" /></label>
+  <label>Description<textarea id="taskDescription" rows="5" maxlength="20000"></textarea></label>
+  <div class="two-col"><label>Priority<select id="taskPriority"><option value="1">1 — highest</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5 — lowest</option></select></label><label>Owner type<select id="taskOwnerType"><option value="unassigned">Unassigned</option><option value="human">Human</option><option value="model">Model</option></select></label></div>
+  <label>Owner<input id="taskOwner" maxlength="160" placeholder="Optional owner/model" /></label>
+  <label>Due date<input id="taskDueAt" type="datetime-local" /></label>
+  <label class="inline-check"><input id="taskCurrentThread" type="checkbox" /> Link to current thread</label>
+  <div class="dialog-actions"><button type="button" data-close="taskDialog" class="secondary">Cancel</button><button>Create task</button></div>
+</form></dialog>
+
+<dialog id="evidenceDialog"><form id="evidenceForm"><h2>Add evidence</h2>
+  <label>Source type<select id="evidenceSourceType"><option value="url">URL</option><option value="github">GitHub</option><option value="document">Document</option><option value="user">User-provided</option><option value="system">System</option></select></label>
+  <label>Title<input id="evidenceTitle" maxlength="240" /></label>
+  <label>URL<input id="evidenceUrl" type="url" /></label>
+  <div class="two-col"><label>Repository<input id="evidenceRepo" placeholder="owner/repo" /></label><label>SHA<input id="evidenceSha" maxlength="80" /></label></div>
+  <label>Path<input id="evidencePath" maxlength="240" /></label>
+  <label>Excerpt<textarea id="evidenceExcerpt" rows="5" maxlength="8000"></textarea></label>
+  <label class="inline-check"><input id="evidenceCurrentThread" type="checkbox" /> Link to current thread</label>
+  <div class="dialog-actions"><button type="button" data-close="evidenceDialog" class="secondary">Cancel</button><button>Add evidence</button></div>
+</form></dialog>
+
 <dialog id="diagnosticsDialog">
   <div class="section-heading"><h2>Production diagnostics</h2><button type="button" data-close="diagnosticsDialog" class="secondary">Close</button></div>
   <p class="subtle">Read-only checks for Auth/RLS access, workspace state, provider configuration, and GitHub event flow.</p>
