@@ -32,7 +32,7 @@ select column_name, data_type
 from information_schema.columns
 where table_schema = 'public'
   and (
-    (table_name = 'decisions' and column_name = 'action_items')
+    (table_name = 'decisions' and column_name in ('action_items','confidence','assumptions','evidence','disagreements'))
     or (table_name = 'tasks' and column_name = 'source_key')
   )
 order by table_name, column_name;
