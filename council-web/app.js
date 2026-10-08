@@ -317,8 +317,12 @@ function renderContributions(rows) {
 }
 
 function renderDecision(decision) {
+  const actionItems = Array.isArray(decision?.action_items) ? decision.action_items.filter(Boolean) : []
+  const actionText = actionItems.length
+    ? `\n\nAction items${decision.status === 'proposed' ? ' — created as tasks on acceptance' : ''}:\n${actionItems.map((item, index) => `${index + 1}. ${item}`).join('\n')}`
+    : ''
   $('decision').textContent = decision
-    ? `${decision.decision}${decision.rationale ? `\n\n${decision.rationale}` : ''}`
+    ? `${decision.decision}${decision.rationale ? `\n\n${decision.rationale}` : ''}${actionText}`
     : 'No synthesis yet.'
 
   $('decision').classList.toggle('muted', !decision)
