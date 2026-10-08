@@ -1,7 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { serviceClient, userClient } from '../_shared/supabase.ts'
-import { compactContributions, compactGithubContext } from '../_shared/context.ts'
+import { compactContributions, compactEvidenceContext, compactGithubContext, compactMemoryContext, compactTaskContext } from '../_shared/context.ts'
 import { boardProviderBudget } from '../_shared/providers/budget.ts'
 import {
   anthropicAdapter,
@@ -128,7 +128,13 @@ Deno.serve(async (req) => {
   const historyLimit = Number(settings.max_context_contributions ?? 18)
   const maxContextChars = Number(settings.max_context_chars ?? 18000)
 
-  const [{ data: rows, error: historyError }, { data: githubRefs }] = await Promise.all([
+  const [
+    { data: rows, error: historyError },
+    { data: githubRefs },
+    { data: memories },
+    { data: tasks },
+    { data: evidenceRefs },
+  ] = await Promise.all([
     db.from('contributions')
       .select('agent, provider, model, kind, round, summary, assumptions, evidence, recommendations, disagreements, confidence, created_at')
       .eq('thread_id', threadId)
@@ -136,6 +142,24 @@ Deno.serve(async (req) => {
       .limit(historyLimit),
     db.from('github_refs')
       .select('repository_full_name, ref_type, ref_number, sha, path, url, metadata')
+      .eq('workspace_id', thread.workspace_id)
+      .order('created_at', { ascending: false })
+      .limit(20),
+    db.from('memory_items')
+      .select('kind, title, content, confidence, thread_id, updated_at')
+      .eq('workspace_id', thread.workspace_id)
+      .eq('status', 'active')
+      .order('updated_at', { ascending: false })
+      .limit(20),
+    db.from('tasks')
+      .select('title, description, status, priority, owner_type, owner, due_at, github_url')
+      .eq('workspace_id', thread.workspace_id)
+      .in('status', ['todo', 'in_progress', 'blocked'])
+      .order('priority', { ascending: true })
+      .order('updated_at', { ascending: false })
+      .limit(16),
+    db.from('evidence_refs')
+      .select('source_type, title, url, repository_full_name, sha, path, excerpt')
       .eq('workspace_id', thread.workspace_id)
       .order('created_at', { ascending: false })
       .limit(20),
@@ -228,6 +252,9 @@ Deno.serve(async (req) => {
       confidence: row.confidence ?? null,
     })) as SharedContribution[], maxContextChars)
     const githubContext = compactGithubContext(githubRefs ?? [])
+    const memoryContext = compactMemoryContext(memories ?? [])
+    const taskContext = compactTaskContext(tasks ?? [])
+    const evidenceContext = compactEvidenceContext(evidenceRefs ?? [])
 
     const result = await adapter.run({
       threadId,
@@ -238,6 +265,9 @@ Deno.serve(async (req) => {
       objective: thread.objective ?? '',
       existing,
       githubContext,
+      memoryContext,
+      taskContext,
+      evidenceContext,
     })
 
     const message = result.normalized.summary?.trim()
