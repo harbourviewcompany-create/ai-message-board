@@ -1,7 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { serviceClient, userClient } from '../_shared/supabase.ts'
-import { compactContributions, compactGithubContext } from '../_shared/context.ts'
+import { compactContributions, compactEvidenceContext, compactGithubContext, compactMemoryContext, compactTaskContext } from '../_shared/context.ts'
 import { councilProviderBudget } from '../_shared/providers/budget.ts'
 import {
   anthropicAdapter,
@@ -53,6 +53,9 @@ async function runPhase(
   adapters: ProviderAdapter[],
   existing: SharedContribution[],
   githubContext: unknown[],
+  memoryContext: unknown[],
+  taskContext: unknown[],
+  evidenceContext: unknown[],
   strategy: CouncilStrategy,
 ) {
   const configured = adapters.filter((a) => a.configured)
@@ -94,6 +97,9 @@ async function runPhase(
         objective: thread.objective,
         existing,
         githubContext,
+        memoryContext,
+        taskContext,
+        evidenceContext,
       })
 
       const { data: contribution, error: contributionError } = await db
@@ -351,11 +357,31 @@ Deno.serve(async (req) => {
       .order('created_at', { ascending: false })
       .limit(limit)
 
-    const { data: refs } = await db.from('github_refs')
-      .select('repository_full_name, ref_type, ref_number, sha, path, url, metadata')
-      .eq('workspace_id', thread.workspace_id)
-      .order('created_at', { ascending: false })
-      .limit(30)
+    const [{ data: refs }, { data: memories }, { data: tasks }, { data: evidenceRefs }] = await Promise.all([
+      db.from('github_refs')
+        .select('repository_full_name, ref_type, ref_number, sha, path, url, metadata')
+        .eq('workspace_id', thread.workspace_id)
+        .order('created_at', { ascending: false })
+        .limit(30),
+      db.from('memory_items')
+        .select('kind, title, content, confidence, thread_id, updated_at')
+        .eq('workspace_id', thread.workspace_id)
+        .eq('status', 'active')
+        .order('updated_at', { ascending: false })
+        .limit(24),
+      db.from('tasks')
+        .select('title, description, status, priority, owner_type, owner, due_at, github_url')
+        .eq('workspace_id', thread.workspace_id)
+        .in('status', ['todo', 'in_progress', 'blocked'])
+        .order('priority', { ascending: true })
+        .order('updated_at', { ascending: false })
+        .limit(20),
+      db.from('evidence_refs')
+        .select('source_type, title, url, repository_full_name, sha, path, excerpt')
+        .eq('workspace_id', thread.workspace_id)
+        .order('created_at', { ascending: false })
+        .limit(24),
+    ])
 
     await db.from('threads').update({ status: 'running', current_round: 1 }).eq('id', thread.id)
 
@@ -372,7 +398,10 @@ Deno.serve(async (req) => {
 
     const baseExisting = compactContributions([...(existingRows ?? [])].reverse() as SharedContribution[], maxContextChars)
     const githubContext = compactGithubContext(refs ?? [])
-    const proposals = await runPhase(db, runId, thread, 'proposal', 1, proposalAdapters, baseExisting, githubContext, strategy)
+    const memoryContext = compactMemoryContext(memories ?? [])
+    const taskContext = compactTaskContext(tasks ?? [])
+    const evidenceContext = compactEvidenceContext(evidenceRefs ?? [])
+    const proposals = await runPhase(db, runId, thread, 'proposal', 1, proposalAdapters, baseExisting, githubContext, memoryContext, taskContext, evidenceContext, strategy)
     if (!proposals.length) throw new Error('All configured providers failed during proposal phase')
 
     await db.from('council_runs').update({ current_phase: 'critique' }).eq('id', runId)
@@ -388,6 +417,9 @@ Deno.serve(async (req) => {
       buildAdapters(settings, 'critique', strategy),
       critiqueContext,
       githubContext,
+      memoryContext,
+      taskContext,
+      evidenceContext,
       strategy,
     )
 
@@ -412,6 +444,9 @@ Deno.serve(async (req) => {
       [synthesisAdapter],
       synthesisContext,
       githubContext,
+      memoryContext,
+      taskContext,
+      evidenceContext,
       strategy,
     )
     if (!synthesis.length) throw new Error('Synthesis failed')

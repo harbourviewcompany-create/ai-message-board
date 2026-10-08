@@ -135,6 +135,7 @@ function renderWorkspaces() {
 
   $('newThreadButton').disabled = !state.workspaceId
   $('workspaceSettingsButton').disabled = !state.workspaceId
+  $('knowledgeButton').disabled = !state.workspaceId
   $('diagnosticsButton').disabled = !state.workspaceId
 }
 
@@ -491,6 +492,131 @@ $('threadForm').addEventListener('submit', async (event) => {
   state.threadId = data.id
   await loadThreads()
   await openThread(data.id)
+})
+
+async function loadKnowledge() {
+  if (!state.workspaceId) return
+
+  const [{ data: memories, error: memoryError }, { data: tasks, error: taskError }, { data: evidence, error: evidenceError }] = await Promise.all([
+    state.client.from('memory_items').select('*').eq('workspace_id', state.workspaceId).eq('status', 'active').order('updated_at', { ascending:false }).limit(40),
+    state.client.from('tasks').select('*').eq('workspace_id', state.workspaceId).not('status', 'in', '(done,cancelled)').order('priority').order('updated_at', { ascending:false }).limit(40),
+    state.client.from('evidence_refs').select('*').eq('workspace_id', state.workspaceId).order('created_at', { ascending:false }).limit(40),
+  ])
+
+  if (memoryError || taskError || evidenceError) {
+    const message = memoryError?.message || taskError?.message || evidenceError?.message || 'Unknown error'
+    $('memoryList').innerHTML = `<div class="subtle">${esc(message)}</div>`
+    $('taskList').innerHTML = ''
+    $('evidenceList').innerHTML = ''
+    return
+  }
+
+  $('memoryList').innerHTML = (memories ?? []).map((item) =>
+    `<article class="knowledge-item"><div class="knowledge-head"><strong>${esc(item.title)}</strong><span class="badge">${esc(item.kind)}</span></div><p>${esc(item.content)}</p><div class="knowledge-actions"><span class="subtle">${item.thread_id ? 'thread-linked' : 'workspace-wide'}</span><button class="secondary small" data-memory-archive="${item.id}">Archive</button></div></article>`
+  ).join('') || '<div class="subtle">No active memory yet.</div>'
+
+  $('taskList').innerHTML = (tasks ?? []).map((task) =>
+    `<article class="knowledge-item"><div class="knowledge-head"><strong>${esc(task.title)}</strong><span class="badge">P${task.priority} · ${esc(task.status)}</span></div><p>${esc(task.description || '')}</p><div class="knowledge-actions"><span class="subtle">${esc(task.owner || task.owner_type || 'unassigned')}</span><div class="row"><button class="secondary small" data-task-status="in_progress" data-task-id="${task.id}">Start</button><button class="secondary small" data-task-status="blocked" data-task-id="${task.id}">Block</button><button class="small" data-task-status="done" data-task-id="${task.id}">Done</button></div></div></article>`
+  ).join('') || '<div class="subtle">No open tasks.</div>'
+
+  $('evidenceList').innerHTML = (evidence ?? []).map((item) => {
+    const source = item.url || (item.repository_full_name ? `${item.repository_full_name}${item.sha ? `@${item.sha}` : ''}` : item.source_type)
+    return `<article class="knowledge-item"><div class="knowledge-head"><strong>${esc(item.title || 'Evidence')}</strong><span class="badge">${esc(item.source_type)}</span></div><p>${esc(item.excerpt || source || '')}</p><span class="subtle">${esc(source || '')}</span></article>`
+  }).join('') || '<div class="subtle">No evidence references yet.</div>'
+
+  document.querySelectorAll('[data-memory-archive]').forEach((button) => button.addEventListener('click', async () => {
+    const { error } = await state.client.from('memory_items').update({ status:'archived' }).eq('id', button.dataset.memoryArchive)
+    if (error) return alert(error.message)
+    await loadKnowledge()
+  }))
+
+  document.querySelectorAll('[data-task-status]').forEach((button) => button.addEventListener('click', async () => {
+    const status = button.dataset.taskStatus
+    const patch = { status, ...(status === 'done' ? { completed_at:new Date().toISOString() } : { completed_at:null }) }
+    const { error } = await state.client.from('tasks').update(patch).eq('id', button.dataset.taskId)
+    if (error) return alert(error.message)
+    await loadKnowledge()
+  }))
+}
+
+$('knowledgeButton').addEventListener('click', async () => {
+  if (!state.workspaceId) return
+  $('knowledgeDialog').showModal()
+  await loadKnowledge()
+})
+
+$('addMemoryButton').addEventListener('click', () => {
+  $('memoryCurrentThread').checked = Boolean(state.threadId)
+  $('memoryDialog').showModal()
+})
+
+$('addTaskButton').addEventListener('click', () => {
+  $('taskCurrentThread').checked = Boolean(state.threadId)
+  $('taskDialog').showModal()
+})
+
+$('addEvidenceButton').addEventListener('click', () => {
+  $('evidenceCurrentThread').checked = Boolean(state.threadId)
+  $('evidenceDialog').showModal()
+})
+
+$('memoryForm').addEventListener('submit', async (event) => {
+  event.preventDefault()
+  const payload = {
+    workspace_id: state.workspaceId,
+    thread_id: $('memoryCurrentThread').checked ? state.threadId : null,
+    kind: $('memoryKind').value,
+    title: $('memoryTitle').value.trim(),
+    content: $('memoryContent').value.trim(),
+    created_by: state.user.id,
+  }
+  const { error } = await state.client.from('memory_items').insert(payload)
+  if (error) return alert(error.message)
+  $('memoryForm').reset()
+  $('memoryDialog').close()
+  await loadKnowledge()
+})
+
+$('taskForm').addEventListener('submit', async (event) => {
+  event.preventDefault()
+  const dueValue = $('taskDueAt').value
+  const payload = {
+    workspace_id: state.workspaceId,
+    thread_id: $('taskCurrentThread').checked ? state.threadId : null,
+    title: $('taskTitle').value.trim(),
+    description: $('taskDescription').value.trim(),
+    priority: Number($('taskPriority').value),
+    owner_type: $('taskOwnerType').value,
+    owner: $('taskOwner').value.trim() || null,
+    due_at: dueValue ? new Date(dueValue).toISOString() : null,
+    created_by: state.user.id,
+  }
+  const { error } = await state.client.from('tasks').insert(payload)
+  if (error) return alert(error.message)
+  $('taskForm').reset()
+  $('taskDialog').close()
+  await loadKnowledge()
+})
+
+$('evidenceForm').addEventListener('submit', async (event) => {
+  event.preventDefault()
+  const payload = {
+    workspace_id: state.workspaceId,
+    thread_id: $('evidenceCurrentThread').checked ? state.threadId : null,
+    source_type: $('evidenceSourceType').value,
+    title: $('evidenceTitle').value.trim() || null,
+    url: $('evidenceUrl').value.trim() || null,
+    repository_full_name: $('evidenceRepo').value.trim() || null,
+    sha: $('evidenceSha').value.trim() || null,
+    path: $('evidencePath').value.trim() || null,
+    excerpt: $('evidenceExcerpt').value.trim() || null,
+    created_by: state.user.id,
+  }
+  const { error } = await state.client.from('evidence_refs').insert(payload)
+  if (error) return alert(error.message)
+  $('evidenceForm').reset()
+  $('evidenceDialog').close()
+  await loadKnowledge()
 })
 
 $('diagnosticsButton').addEventListener('click', () => {
