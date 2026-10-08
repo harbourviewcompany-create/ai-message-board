@@ -10,7 +10,7 @@ function assert(condition: unknown, message: string): asserts condition {
 const options: AdapterOptions = { model: 'test-model', timeoutMs: 10000, maxRetries: 0, effort: 'medium' }
 const input: ProviderInput = {
   threadId: 'thread-1', runId: 'run-1', phase: 'proposal', strategy: 'balanced',
-  title: 'Test', objective: 'Choose the safest option', existing: [], githubContext: [],
+  title: 'Test', objective: 'Choose the safest option', existing: [], githubContext: [], memoryContext: [], taskContext: [], evidenceContext: [],
 }
 
 Deno.test('OpenAI request uses reasoning and strict structured output', () => {
@@ -37,4 +37,19 @@ Deno.test('xAI Responses request uses reasoning envelope, cache key and structur
   assert(!('reasoning_effort' in body), 'Legacy xAI reasoning_effort field must not be used')
   assert(body.prompt_cache_key === 'council:thread-1', 'xAI prompt cache key missing')
   assert(body.text?.format?.type === 'json_schema', 'xAI JSON schema format missing')
+})
+
+Deno.test('provider prompt carries memory, tasks and evidence', () => {
+  const enriched: ProviderInput = {
+    ...input,
+    memoryContext: [{ kind:'decision', title:'Keep RLS enabled', content:'All exposed tables require RLS.' }],
+    taskContext: [{ title:'Configure webhook', status:'todo', priority:1 }],
+    evidenceContext: [{ source_type:'github', title:'PR #4', sha:'abc123' }],
+  }
+  const body: any = buildOpenAIRequest(options, enriched)
+  const prompt = String(body.input)
+  assert(prompt.includes('Institutional memory:'), 'Memory section missing')
+  assert(prompt.includes('Keep RLS enabled'), 'Memory content missing')
+  assert(prompt.includes('Configure webhook'), 'Task content missing')
+  assert(prompt.includes('PR #4'), 'Evidence content missing')
 })
