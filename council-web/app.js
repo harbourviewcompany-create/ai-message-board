@@ -135,6 +135,7 @@ function renderWorkspaces() {
 
   $('newThreadButton').disabled = !state.workspaceId
   $('workspaceSettingsButton').disabled = !state.workspaceId
+  $('diagnosticsButton').disabled = !state.workspaceId
 }
 
 async function loadWorkspaceSettings() {
@@ -490,6 +491,53 @@ $('threadForm').addEventListener('submit', async (event) => {
   state.threadId = data.id
   await loadThreads()
   await openThread(data.id)
+})
+
+$('diagnosticsButton').addEventListener('click', () => {
+  if (!state.workspaceId) return
+  $('diagnosticsSummary').innerHTML = '<div class="subtle">Run checks to inspect this workspace.</div>'
+  $('diagnosticsRaw').classList.add('hidden')
+  $('diagnosticsDialog').showModal()
+})
+
+$('runDiagnosticsButton').addEventListener('click', async () => {
+  if (!state.workspaceId) return
+  $('runDiagnosticsButton').disabled = true
+  $('diagnosticsSummary').innerHTML = '<div class="subtle">Checking production…</div>'
+
+  const { data, error } = await state.client.functions.invoke('council-orchestrator', {
+    body: { action: 'diagnostics', workspace_id: state.workspaceId },
+  })
+
+  $('runDiagnosticsButton').disabled = false
+
+  if (error || !data) {
+    $('diagnosticsSummary').innerHTML = `<div class="diagnostic-item bad"><strong>Diagnostics failed</strong><span>${esc(error?.message || 'Unknown error')}</span></div>`
+    return
+  }
+
+  const providerRows = Object.entries(data.providers || {}).map(([name, provider]) => ({
+    label: name === 'openai' ? 'ChatGPT' : name === 'anthropic' ? 'Claude' : 'Grok',
+    ok: Boolean(provider.enabled && provider.configured),
+    detail: !provider.enabled ? 'disabled' : provider.configured ? provider.model : 'API key missing',
+  }))
+
+  const cards = [
+    { label: 'Authenticated RLS', ok: Boolean(data.auth?.rls_access), detail: data.auth?.rls_access ? 'workspace accessible' : 'failed' },
+    ...providerRows,
+    { label: 'GitHub webhook secret', ok: Boolean(data.github?.webhook_secret_configured), detail: data.github?.webhook_secret_configured ? 'configured' : 'missing' },
+    { label: 'Mapped repositories', ok: (data.github?.repositories?.length ?? 0) > 0, detail: `${data.github?.repositories?.length ?? 0} mapped` },
+    { label: 'GitHub events received', ok: Boolean(data.github?.latest_event), detail: data.github?.latest_event ? `${data.github.latest_event.event_name} · ${data.github.latest_event.repository_full_name}` : 'none yet' },
+    { label: 'Council activity', ok: (data.database?.council_runs ?? 0) > 0, detail: `${data.database?.council_runs ?? 0} runs` },
+    { label: 'Provider activity', ok: (data.database?.agent_runs ?? 0) > 0, detail: `${data.database?.agent_runs ?? 0} provider runs` },
+  ]
+
+  $('diagnosticsSummary').innerHTML = cards.map((card) =>
+    `<div class="diagnostic-item ${card.ok ? 'good' : 'warn'}"><strong>${esc(card.label)}</strong><span>${esc(card.detail)}</span></div>`
+  ).join('')
+
+  $('diagnosticsRaw').textContent = JSON.stringify(data, null, 2)
+  $('diagnosticsRaw').classList.remove('hidden')
 })
 
 $('workspaceSettingsButton').addEventListener('click', async () => {

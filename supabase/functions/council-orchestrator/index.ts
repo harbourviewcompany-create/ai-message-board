@@ -172,6 +172,73 @@ Deno.serve(async (req) => {
     })
   }
 
+  if (body?.action === 'diagnostics') {
+    const workspaceId = typeof body?.workspace_id === 'string' ? body.workspace_id : ''
+    if (!workspaceId) return json({ error: 'workspace_id is required' }, 400)
+
+    const { data: workspace, error: workspaceError } = await caller
+      .from('workspaces')
+      .select('id, name')
+      .eq('id', workspaceId)
+      .single()
+
+    if (workspaceError || !workspace) return json({ error: 'Workspace not found or forbidden' }, 404)
+
+    const [settingsResult, threadsResult, reposResult] = await Promise.all([
+      caller.from('workspace_settings').select('*').eq('workspace_id', workspaceId).maybeSingle(),
+      caller.from('threads').select('id, mode, status').eq('workspace_id', workspaceId),
+      caller.from('github_repositories').select('full_name').eq('workspace_id', workspaceId).order('created_at'),
+    ])
+
+    const settings = settingsResult.data
+    const threads = threadsResult.data ?? []
+    const repos = reposResult.data ?? []
+    const threadIds = threads.map((row: any) => row.id)
+    const db = serviceClient()
+
+    let councilRunCount = 0
+    let agentRunCount = 0
+    let latestGithubEvent: any = null
+    if (threadIds.length) {
+      const [runsResult, agentsResult] = await Promise.all([
+        db.from('council_runs').select('id', { count: 'exact', head: true }).in('thread_id', threadIds),
+        db.from('agent_runs').select('id', { count: 'exact', head: true }).in('thread_id', threadIds),
+      ])
+      councilRunCount = runsResult.count ?? 0
+      agentRunCount = agentsResult.count ?? 0
+    }
+
+    const { data: githubEvents } = await db.from('github_events')
+      .select('event_name, repository_full_name, received_at')
+      .eq('workspace_id', workspaceId)
+      .order('received_at', { ascending: false })
+      .limit(1)
+    latestGithubEvent = githubEvents?.[0] ?? null
+
+    return json({
+      ok: true,
+      workspace: { id: workspace.id, name: workspace.name },
+      auth: { rls_access: true },
+      database: {
+        threads: threads.length,
+        council_threads: threads.filter((row: any) => row.mode !== 'board').length,
+        board_threads: threads.filter((row: any) => row.mode === 'board').length,
+        council_runs: councilRunCount,
+        agent_runs: agentRunCount,
+      },
+      providers: {
+        openai: { enabled: Boolean(settings?.enable_openai), configured: Boolean(Deno.env.get('OPENAI_API_KEY')), model: settings?.openai_model ?? 'gpt-6.1-sol' },
+        anthropic: { enabled: Boolean(settings?.enable_anthropic), configured: Boolean(Deno.env.get('ANTHROPIC_API_KEY')), model: settings?.anthropic_model ?? 'claude-sonnet-5-5' },
+        xai: { enabled: Boolean(settings?.enable_xai), configured: Boolean(Deno.env.get('XAI_API_KEY')), model: settings?.xai_model ?? 'grok-4.7' },
+      },
+      github: {
+        webhook_secret_configured: Boolean(Deno.env.get('GITHUB_WEBHOOK_SECRET')),
+        repositories: repos.map((row: any) => row.full_name),
+        latest_event: latestGithubEvent,
+      },
+      checked_at: new Date().toISOString(),
+    })
+  }
   const threadId = body?.thread_id
   if (!threadId) return json({ error: 'thread_id is required' }, 400)
 
