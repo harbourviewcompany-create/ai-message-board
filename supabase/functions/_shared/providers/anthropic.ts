@@ -1,7 +1,24 @@
 import { buildPrompt } from './prompt.ts'
 import { extractJson } from './normalize.ts'
+import { contributionSchema } from './schema.ts'
 import { fetchWithRetry } from './http.ts'
 import type { AdapterOptions, ProviderAdapter, ProviderInput, ProviderResult } from './types.ts'
+
+export function buildAnthropicRequest(options: AdapterOptions, input: ProviderInput) {
+  return {
+    model: options.model,
+    max_tokens: 2400,
+    system: 'Follow the Council protocol. Return only the structured contribution. Never expose hidden chain-of-thought.',
+    output_config: {
+      effort: options.effort,
+      format: {
+        type: 'json_schema',
+        schema: contributionSchema,
+      },
+    },
+    messages: [{ role: 'user', content: buildPrompt(input) }],
+  }
+}
 
 export function anthropicAdapter(options: AdapterOptions): ProviderAdapter {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
@@ -20,13 +37,7 @@ export function anthropicAdapter(options: AdapterOptions): ProviderAdapter {
             'anthropic-version': '2023-06-01',
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            model: options.model,
-            max_tokens: 2200,
-            system: 'Follow the Council protocol. Return one JSON object matching the requested fields. Do not expose hidden chain-of-thought.',
-            output_config: { effort: options.effort },
-            messages: [{ role: 'user', content: buildPrompt(input) }],
-          }),
+          body: JSON.stringify(buildAnthropicRequest(options, input)),
         },
         options.timeoutMs,
         options.maxRetries,
@@ -34,21 +45,19 @@ export function anthropicAdapter(options: AdapterOptions): ProviderAdapter {
 
       if (!response.ok) throw new Error(`Anthropic ${response.status}: ${await response.text()}`)
       const body = await response.json()
+      if (body.stop_reason === 'refusal') throw new Error('Anthropic refused the request')
+      if (body.stop_reason === 'model_context_window_exceeded') throw new Error('Anthropic context window exceeded')
 
-      if (body.stop_reason === 'refusal') {
-        throw new Error('Anthropic refused the request')
-      }
-
-      const text = body.content
-        ?.filter((x: any) => x.type === 'text')
-        .map((x: any) => x.text)
+      const outputText = body.content
+        ?.filter((item: any) => item.type === 'text')
+        .map((item: any) => item.text)
         .join('\n')
-      if (!text) throw new Error('Anthropic response contained no text')
+      if (!outputText) throw new Error('Anthropic response contained no text')
 
       return {
         provider: 'anthropic',
         model: options.model,
-        normalized: extractJson(text),
+        normalized: extractJson(outputText),
         usage: body.usage ?? {},
       }
     },

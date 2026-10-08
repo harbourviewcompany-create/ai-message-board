@@ -4,6 +4,24 @@ import { contributionSchema } from './schema.ts'
 import { fetchWithRetry } from './http.ts'
 import type { AdapterOptions, ProviderAdapter, ProviderInput, ProviderResult } from './types.ts'
 
+export function buildOpenAIRequest(options: AdapterOptions, input: ProviderInput) {
+  return {
+    model: options.model,
+    store: false,
+    instructions: 'Follow the Council protocol. Produce only the structured contribution.',
+    input: buildPrompt(input),
+    reasoning: { effort: options.effort },
+    text: {
+      format: {
+        type: 'json_schema',
+        name: 'council_contribution',
+        strict: true,
+        schema: contributionSchema,
+      },
+    },
+  }
+}
+
 export function openAIAdapter(options: AdapterOptions): ProviderAdapter {
   const apiKey = Deno.env.get('OPENAI_API_KEY') ?? ''
 
@@ -20,21 +38,7 @@ export function openAIAdapter(options: AdapterOptions): ProviderAdapter {
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            model: options.model,
-            store: false,
-            instructions: 'Follow the Council protocol. Produce only the structured contribution.',
-            input: buildPrompt(input),
-            reasoning: { effort: options.effort },
-            text: {
-              format: {
-                type: 'json_schema',
-                name: 'council_contribution',
-                strict: true,
-                schema: contributionSchema,
-              },
-            },
-          }),
+          body: JSON.stringify(buildOpenAIRequest(options, input)),
         },
         options.timeoutMs,
         options.maxRetries,
@@ -42,15 +46,15 @@ export function openAIAdapter(options: AdapterOptions): ProviderAdapter {
 
       if (!response.ok) throw new Error(`OpenAI ${response.status}: ${await response.text()}`)
       const body = await response.json()
-      const text = body.output_text ??
+      const outputText = body.output_text ??
         body.output?.flatMap((item: any) => item.content ?? [])
-          .find((c: any) => c.type === 'output_text')?.text
-      if (!text) throw new Error('OpenAI response contained no output text')
+          .find((content: any) => content.type === 'output_text')?.text
+      if (!outputText) throw new Error('OpenAI response contained no output text')
 
       return {
         provider: 'openai',
         model: options.model,
-        normalized: extractJson(text),
+        normalized: extractJson(outputText),
         usage: body.usage ?? {},
       }
     },

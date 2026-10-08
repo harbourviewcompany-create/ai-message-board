@@ -23,11 +23,12 @@ Council v2 adds:
 - workspace-level routing and model settings
 - strategies: balanced, quality, fast, economy, adversarial
 - human approval before a synthesized decision becomes accepted
-- structured outputs for OpenAI and Grok
+- structured outputs for OpenAI, Claude, and Grok
 - current model defaults:
   - OpenAI proposal: `gpt-6.1-sol`
   - OpenAI synthesis: `gpt-6-astra`
-  - Anthropic: `claude-sonnet-5`
+  - OpenAI economy/fast: `gpt-6-luna`
+  - Anthropic: `claude-sonnet-5-5`
   - xAI: `grok-4.7`
 - run and provider-call history in the UI
 - GitHub signed webhook ingestion
@@ -84,3 +85,14 @@ Threads can now explicitly use one of two modes:
 Board mode uses the same workspace provider settings, current model names, retry/timeout policy, RLS, Realtime, and GitHub context as Council mode. Each model reply has a request-level idempotency key so retries do not create duplicate replies.
 
 The `board-reply` Edge Function can rotate automatically through available providers or target one provider explicitly. Human board messages are inserted under RLS as `contribution_kind = 'message'`.
+
+## Production optimization controls
+
+- Shared context is clipped and bounded by both contribution count and character budget before provider calls.
+- Council provider timeouts are strategy-aware and capped so synchronous proposal/critique/synthesis stays inside hosted Edge Function limits.
+- Board allows only one active AI reply per thread and marks stale replies failed before accepting another.
+- Completed idempotency keys are replay-safe: callers receive the existing run rather than creating duplicate model work.
+- GitHub webhook bodies are HMAC-verified, normalized to relevant fields, size-capped, and deduplicated by delivery ID before refs are written.
+- Member-written contributions are restricted to `agent = human`; provider/model/run fields and structured AI fields remain service-role-only.
+
+Production still requires a real authenticated smoke test with configured model secrets before claiming provider calls are fully exercised end to end.

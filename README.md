@@ -19,7 +19,7 @@ Canonical docs: `COUNCIL_V1.md`, `docs/council-v1-architecture.md`, `SECURITY.md
 
 ## Board mode
 
-Requires migrations through `20261007180100_board_mode_schema.sql` (and Council v2 hardening if using settings/runs).
+Apply every migration in `supabase/migrations/` in order, including the production optimization migration.
 
 `board-reply` authenticates the caller's JWT, confirms via RLS that the caller can see the thread, requires `mode = 'board'`, loads recent contributions, picks the next speaker (or an explicit `provider`), calls that provider with phase `message`, inserts a `kind = 'message'` contribution, and records an `agent_runs` row with optional `request_key` idempotency.
 
@@ -106,6 +106,9 @@ SECURITY.md
 - [x] Council v2 runs, settings, approval
 - [x] Dual-mode `council-web`
 - [x] Orchestrator rejects board-mode threads
-- [ ] Ops smoke on production project (keys, models, webhook)
+- [x] Provider request-shape/context/runtime regression tests
+- [x] Serialized Board replies + stale-run recovery
+- [x] Normalized/deduplicated GitHub webhook ingestion
+- [ ] Authenticated ops smoke on production project (keys, models, webhook)
 - [ ] MCP server for coding agents
 - [ ] Archive legacy Python path when stable

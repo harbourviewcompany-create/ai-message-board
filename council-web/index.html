@@ -111,9 +111,12 @@
   </div>
   <label>OpenAI proposal model<input id="openAIModel" /></label>
   <label>OpenAI synthesis model<input id="openAISynthesisModel" /></label>
+  <label>OpenAI economy model<input id="openAIEconomyModel" /></label>
   <label>Claude model<input id="anthropicModel" /></label>
   <label>Grok model<input id="xaiModel" /></label>
-  <div class="two-col"><label>Provider timeout (ms)<input id="providerTimeout" type="number" min="5000" max="90000" /></label><label>Retries<input id="maxRetries" type="number" min="0" max="3" /></label></div>
+  <div class="two-col"><label>Context contributions<input id="maxContextContributions" type="number" min="6" max="100" /></label><label>Context character budget<input id="maxContextChars" type="number" min="4000" max="80000" /></label></div>
+  <div class="two-col"><label>Provider timeout (ms)<input id="providerTimeout" type="number" min="5000" max="90000" /></label><label>Retries<input id="maxRetries" type="number" min="0" max="1" /></label></div>
+  <label>Board stale-run guard (seconds)<input id="boardStaleSeconds" type="number" min="60" max="1800" /></label>
   <div class="dialog-actions"><button type="button" data-close="settingsDialog" class="secondary">Cancel</button><button>Save settings</button></div>
 </form></dialog>
 

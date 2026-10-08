@@ -1,6 +1,8 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { serviceClient, userClient } from '../_shared/supabase.ts'
+import { compactContributions, compactGithubContext } from '../_shared/context.ts'
+import { boardProviderBudget } from '../_shared/providers/budget.ts'
 import {
   anthropicAdapter,
   openAIAdapter,
@@ -36,16 +38,19 @@ function effortFor(strategy: CouncilStrategy): ReasoningEffort {
 }
 
 function configuredAdapters(settings: any): Record<ProviderKey, ProviderAdapter | null> {
-  const timeoutMs = Number(settings.provider_timeout_ms ?? 35000)
-  const maxRetries = Number(settings.max_retries ?? 1)
-  const effort = effortFor((settings.strategy ?? 'balanced') as CouncilStrategy)
+  const { timeoutMs, maxRetries } = boardProviderBudget(settings)
+  const strategy = (settings.strategy ?? 'balanced') as CouncilStrategy
+  const effort = effortFor(strategy)
+  const openAIModel = strategy === 'economy' || strategy === 'fast'
+    ? (settings.openai_economy_model ?? 'gpt-6-luna')
+    : (settings.openai_model ?? 'gpt-6.1-sol')
 
   return {
     openai: settings.enable_openai
-      ? openAIAdapter({ model: settings.openai_model ?? 'gpt-6.1-sol', timeoutMs, maxRetries, effort })
+      ? openAIAdapter({ model: openAIModel, timeoutMs, maxRetries, effort })
       : null,
     anthropic: settings.enable_anthropic
-      ? anthropicAdapter({ model: settings.anthropic_model ?? 'claude-sonnet-5', timeoutMs, maxRetries, effort })
+      ? anthropicAdapter({ model: settings.anthropic_model ?? 'claude-sonnet-5-5', timeoutMs, maxRetries, effort })
       : null,
     xai: settings.enable_xai
       ? xAIAdapter({ model: settings.xai_model ?? 'grok-4.7', timeoutMs, maxRetries, effort })
@@ -110,15 +115,18 @@ Deno.serve(async (req) => {
     enable_anthropic: true,
     enable_xai: true,
     openai_model: 'gpt-6.1-sol',
-    anthropic_model: 'claude-sonnet-5',
+    anthropic_model: 'claude-sonnet-5-5',
     xai_model: 'grok-4.7',
-    max_context_contributions: 30,
-    provider_timeout_ms: 35000,
-    max_retries: 1,
+    max_context_contributions: 18,
+    max_context_chars: 18000,
+    provider_timeout_ms: 30000,
+    max_retries: 0,
+    board_stale_after_seconds: 300,
   }
 
   const db = serviceClient()
-  const historyLimit = Number(settings.max_context_contributions ?? 30)
+  const historyLimit = Number(settings.max_context_contributions ?? 18)
+  const maxContextChars = Number(settings.max_context_chars ?? 18000)
 
   const [{ data: rows, error: historyError }, { data: githubRefs }] = await Promise.all([
     db.from('contributions')
@@ -149,10 +157,34 @@ Deno.serve(async (req) => {
   const adapter = available[providerKey]!
   if (!adapter.configured) return json({ error: `${AGENT_NAME[providerKey]} API key is not configured` }, 409)
 
+  const staleSeconds = Math.max(60, Math.min(1800, Number(settings.board_stale_after_seconds ?? 300)))
+  const staleBefore = new Date(Date.now() - staleSeconds * 1000).toISOString()
+  await db.from('agent_runs')
+    .update({
+      status: 'failed',
+      error: 'Board reply exceeded the stale-run guard',
+      completed_at: new Date().toISOString(),
+    })
+    .eq('thread_id', threadId)
+    .eq('phase', 'message')
+    .eq('status', 'running')
+    .lt('started_at', staleBefore)
+
   const requestKey =
     typeof body.idempotency_key === 'string' && body.idempotency_key.trim()
       ? body.idempotency_key.trim().slice(0, 200)
       : crypto.randomUUID()
+
+  const { data: sameRun } = await db.from('agent_runs')
+    .select('id, status, contribution_id, provider, model, error')
+    .eq('thread_id', threadId)
+    .eq('request_key', requestKey)
+    .maybeSingle()
+
+  if (sameRun) {
+    const status = sameRun.status === 'running' ? 202 : 200
+    return json({ ok: sameRun.status !== 'failed', reused: true, run: sameRun }, status)
+  }
 
   const { data: run, error: runError } = await db.from('agent_runs').insert({
     thread_id: threadId,
@@ -167,18 +199,22 @@ Deno.serve(async (req) => {
 
   if (runError) {
     if (runError.code === '23505') {
-      const { data: existing } = await db.from('agent_runs')
-        .select('id, status, contribution_id, provider, model, error')
+      const { data: activeRun } = await db.from('agent_runs')
+        .select('id, status, contribution_id, provider, model, error, request_key')
         .eq('thread_id', threadId)
-        .eq('request_key', requestKey)
+        .eq('phase', 'message')
+        .eq('status', 'running')
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle()
-      return json({ ok: true, reused: true, run: existing }, 202)
+
+      if (activeRun) return json({ ok: true, reused: true, run: activeRun }, 202)
     }
     return json({ error: `Failed to record run: ${runError.message}` }, 500)
   }
 
   try {
-    const existing: SharedContribution[] = history.map((row: any) => ({
+    const existing = compactContributions(history.map((row: any) => ({
       agent: row.agent ?? 'Human',
       provider: row.provider ?? null,
       model: row.model ?? null,
@@ -190,7 +226,8 @@ Deno.serve(async (req) => {
       recommendations: Array.isArray(row.recommendations) ? row.recommendations : [],
       disagreements: Array.isArray(row.disagreements) ? row.disagreements : [],
       confidence: row.confidence ?? null,
-    }))
+    })) as SharedContribution[], maxContextChars)
+    const githubContext = compactGithubContext(githubRefs ?? [])
 
     const result = await adapter.run({
       threadId,
@@ -200,7 +237,7 @@ Deno.serve(async (req) => {
       title: thread.title ?? 'Board thread',
       objective: thread.objective ?? '',
       existing,
-      githubContext: githubRefs ?? [],
+      githubContext,
     })
 
     const message = result.normalized.summary?.trim()
