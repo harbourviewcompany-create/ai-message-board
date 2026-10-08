@@ -61,8 +61,9 @@ create index if not exists memory_items_thread_updated_idx
   on public.memory_items (thread_id, updated_at desc);
 create index if not exists memory_items_kind_idx
   on public.memory_items (workspace_id, kind, updated_at desc);
-create index if not exists memory_items_source_decision_idx
-  on public.memory_items (source_decision_id);
+create unique index if not exists memory_items_source_decision_unique_idx
+  on public.memory_items (source_decision_id)
+  where source_decision_id is not null and kind = 'decision';
 
 create index if not exists tasks_workspace_status_priority_idx
   on public.tasks (workspace_id, status, priority, updated_at desc);
@@ -97,25 +98,27 @@ returns trigger
 language plpgsql
 security invoker
 set search_path = public, pg_temp
-as $$
+as $
 declare
   target_workspace uuid;
   actor uuid;
 begin
-  if new.status <> 'accepted' or old.status = 'accepted' then
+  if new.status <> 'accepted' then
     return new;
   end if;
 
-  actor := (select auth.uid());
-  if actor is null then
+  if tg_op = 'UPDATE' and old.status = 'accepted' then
     return new;
   end if;
 
-  select workspace_id into target_workspace
+  select workspace_id, created_by
+  into target_workspace, actor
   from public.threads
   where id = new.thread_id;
 
-  if target_workspace is null then
+  actor := coalesce((select auth.uid()), actor);
+
+  if target_workspace is null or actor is null then
     return new;
   end if;
 
@@ -139,22 +142,62 @@ begin
     concat_ws(E'\n\n', new.decision, nullif(new.rationale, '')),
     'active',
     actor,
-    jsonb_build_object('captured_from_decision', true)
+    jsonb_build_object(
+      'captured_from_decision', true,
+      'capture_mode', case when tg_op = 'INSERT' then 'automatic' else 'approval' end
+    )
   )
-  on conflict do nothing;
+  on conflict (source_decision_id) where source_decision_id is not null and kind = 'decision'
+  do nothing;
 
   return new;
 end;
-$$;
+$;
 
 revoke all on function private.capture_accepted_decision_memory()
 from public, anon;
-grant execute on function private.capture_accepted_decision_memory() to authenticated;
+grant execute on function private.capture_accepted_decision_memory() to authenticated, service_role;
 
 drop trigger if exists trg_decisions_capture_memory on public.decisions;
 create trigger trg_decisions_capture_memory
-after update of status on public.decisions
+after insert or update of status on public.decisions
 for each row execute function private.capture_accepted_decision_memory();
+
+create or replace function private.protect_workspace_provenance()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public, pg_temp
+as $
+begin
+  if new.workspace_id <> old.workspace_id or new.created_by <> old.created_by then
+    raise exception 'workspace_id and created_by are immutable';
+  end if;
+  return new;
+end;
+$;
+
+revoke all on function private.protect_workspace_provenance()
+from public, anon;
+grant execute on function private.protect_workspace_provenance() to authenticated, service_role;
+
+drop trigger if exists trg_memory_items_provenance on public.memory_items;
+create trigger trg_memory_items_provenance
+before update on public.memory_items
+for each row execute function private.protect_workspace_provenance();
+
+drop trigger if exists trg_tasks_provenance on public.tasks;
+create trigger trg_tasks_provenance
+before update on public.tasks
+for each row execute function private.protect_workspace_provenance();
+
+drop trigger if exists trg_evidence_refs_provenance on public.evidence_refs;
+create trigger trg_evidence_refs_provenance
+before update on public.evidence_refs
+for each row execute function private.protect_workspace_provenance();
+
+revoke all on public.memory_items, public.tasks, public.evidence_refs from anon;
+grant select, insert, update, delete on public.memory_items, public.tasks, public.evidence_refs to authenticated;
 
 alter table public.memory_items enable row level security;
 alter table public.tasks enable row level security;
