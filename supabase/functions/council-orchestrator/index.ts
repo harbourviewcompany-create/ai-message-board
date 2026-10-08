@@ -130,7 +130,7 @@ function buildAdapters(settings: any, phase: Phase, strategy: CouncilStrategy) {
 
   const openAIModel = phase === 'synthesis'
     ? (strategy === 'economy' || strategy === 'fast'
-      ? settings.openai_model
+      ? (settings.openai_economy_model ?? 'gpt-6-luna')
       : settings.openai_synthesis_model)
     : strategy === 'quality' || strategy === 'adversarial'
       ? settings.openai_synthesis_model
